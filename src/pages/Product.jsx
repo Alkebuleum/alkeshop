@@ -9,6 +9,7 @@ import { getProduct, getSeller } from "../lib/market";
 import { LICENSES, PRODUCT_CATEGORIES } from "../lib/catalog";
 import { alke, fileSize, initials, monthYear } from "../lib/format";
 import NotFound from "./NotFound";
+import { useTitle } from "../lib/useTitle";
 
 // Back, share and save, floating over the cover on phones.
 export function DetailActions({ back, backLabel, id, title }) {
@@ -81,6 +82,7 @@ export default function Product() {
   const { conn, ensureConnected } = useWallet();
   const [err, setErr] = useState(null);
   const p = getProduct(s, id);
+  useTitle(p?.title);
   if (!p) return s.ready && s.authReady ? <NotFound /> : <Shell><Loading /></Shell>;
   const seller = getSeller(s, p.sellerId);
   const license = LICENSES[p.license] || LICENSES.commercial;

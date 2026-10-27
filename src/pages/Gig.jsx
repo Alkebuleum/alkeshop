@@ -10,6 +10,7 @@ import { getService, getSeller } from "../lib/market";
 import { SERVICE_CATEGORIES } from "../lib/catalog";
 import { alke, fileSize } from "../lib/format";
 import NotFound from "./NotFound";
+import { useTitle } from "../lib/useTitle";
 
 // The seller's questions, answered before the request is sent.
 function RequestSheet({ service, seller, onClose, onSent }) {
@@ -51,6 +52,7 @@ export default function Gig() {
   const { conn, ensureConnected } = useWallet();
   const [asking, setAsking] = useState(false);
   const x = getService(s, id);
+  useTitle(x?.title);
   if (!x) return s.ready && s.authReady ? <NotFound /> : <Shell><Loading /></Shell>;
   const seller = getSeller(s, x.sellerId);
   const first = seller?.name.split(" ")[0];

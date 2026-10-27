@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+# Private pages (they need a signed-in wallet and show nothing to crawlers).
+Disallow: /admin
+Disallow: /checkout/
+Disallow: /orders
+Disallow: /library
+Disallow: /seller$
+Disallow: /seller/
+Disallow: /wallet
+
+Sitemap: https://alkeshop.net/sitemap.xml

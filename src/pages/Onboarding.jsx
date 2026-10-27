@@ -8,6 +8,7 @@ import { useStore, applyAsSeller } from "../lib/store";
 import { withSignIn } from "../wallet/SignIn";
 import { walletTail } from "../lib/format";
 import { AFRICAN_COUNTRIES, ALL_COUNTRIES } from "../lib/countries";
+import { useTitle } from "../lib/useTitle";
 
 const STEPS = ["About you", "What you sell", "Payout wallet", "Terms"];
 
@@ -42,6 +43,7 @@ function Status({ profile }) {
 function Onboarding() {
   const s = useStore();
   const { conn, openConnect } = useWallet();
+  useTitle("Become a seller");
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [f, setF] = useState({ name: "", type: "Business", country: "Ghana", email: "", products: true, services: false, bio: "", portfolio: "", rights: false, terms: false });

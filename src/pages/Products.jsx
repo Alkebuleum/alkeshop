@@ -6,6 +6,7 @@ import { EmptyState, Icon, Sheet } from "../components/ui";
 import { useStore } from "../lib/store";
 import { allProducts, getSeller, search } from "../lib/market";
 import { PRODUCT_CATEGORIES } from "../lib/catalog";
+import { useTitle } from "../lib/useTitle";
 
 const PRICE_CAPS = [100, 300, 1000];
 const SORTS = { popular: "Popular", newest: "Newest", "price-asc": "Price: low to high", "price-desc": "Price: high to low" };
@@ -33,6 +34,7 @@ export function ActiveFilter({ label, onRemove }) {
 }
 
 export default function Products() {
+  useTitle("Digital products");
   const s = useStore();
   const [params, setParams] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);

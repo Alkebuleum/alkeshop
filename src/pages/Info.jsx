@@ -7,6 +7,7 @@ import { Notice } from "../components/ui";
 import { LICENSES } from "../lib/catalog";
 import { CREDITS_ENABLED, FEE_LABEL } from "../lib/config";
 import NotFound from "./NotFound";
+import { useTitle } from "../lib/useTitle";
 
 const PAGES = {
   help: {
@@ -53,6 +54,7 @@ const PAGES = {
 export default function Info({ page }) {
   const { slug } = useParams();
   const p = PAGES[page || slug];
+  useTitle(p?.title);
   if (!p) return <NotFound />;
   return (
     <Shell tab="none">

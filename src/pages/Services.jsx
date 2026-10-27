@@ -7,11 +7,13 @@ import { SearchField, ActiveFilter } from "./Products";
 import { useStore } from "../lib/store";
 import { allServices, getSeller, search } from "../lib/market";
 import { SERVICE_CATEGORIES } from "../lib/catalog";
+import { useTitle } from "../lib/useTitle";
 
 const DAYS = [2, 4, 7];
 const BUDGETS = [200, 500, 1000];
 
 export default function Services() {
+  useTitle("Freelance services");
   const s = useStore();
   const [params, setParams] = useSearchParams();
   const [sheet, setSheet] = useState(null); // "filters" | "days" | "budget"

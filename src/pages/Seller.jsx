@@ -8,6 +8,7 @@ import { useStore } from "../lib/store";
 import { allProducts, allServices, getSeller } from "../lib/market";
 import { initials, monthYear } from "../lib/format";
 import NotFound from "./NotFound";
+import { useTitle } from "../lib/useTitle";
 
 export default function Seller() {
   const { id } = useParams();
@@ -15,6 +16,7 @@ export default function Seller() {
   const nav = useNavigate();
   const [tab, setTab] = useState("products");
   const seller = getSeller(s, id);
+  useTitle(seller?.name);
   if (!seller) return <NotFound />;
   const products = allProducts(s).filter((p) => p.sellerId === seller.id);
   const services = allServices(s).filter((x) => x.sellerId === seller.id);
