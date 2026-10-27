@@ -7,8 +7,8 @@ import { accountName } from "../wallet/AccountMenu";
 import { useStore, applyAsSeller } from "../lib/store";
 import { withSignIn } from "../wallet/SignIn";
 import { walletTail } from "../lib/format";
+import { AFRICAN_COUNTRIES, ALL_COUNTRIES } from "../lib/countries";
 
-const COUNTRIES = ["Ghana", "Kenya", "Nigeria", "Senegal", "South Africa", "Ethiopia", "Tanzania", "Uganda", "Rwanda", "Côte d'Ivoire", "Cameroon", "Zambia", "Other"];
 const STEPS = ["About you", "What you sell", "Payout wallet", "Terms"];
 
 function Field({ id, label, hint, children }) {
@@ -100,7 +100,10 @@ function Onboarding() {
                       ))}
                     </div>
                   </fieldset>
-                  <Field id="ob-country" label="Country"><select id="ob-country" className="field" value={f.country} onChange={set("country")}>{COUNTRIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                  <Field id="ob-country" label="Country"><select id="ob-country" className="field" value={f.country} onChange={set("country")}>
+                    <optgroup label="Africa">{AFRICAN_COUNTRIES.map((c) => <option key={c}>{c}</option>)}</optgroup>
+                    <optgroup label="All countries">{ALL_COUNTRIES.map((c) => <option key={`all-${c}`}>{c}</option>)}</optgroup>
+                  </select></Field>
                   <Field id="ob-email" label="Email" hint="We'll email you about your application and payouts."><input id="ob-email" type="email" className="field" value={f.email} onChange={set("email")} autoComplete="email" /></Field>
                 </form>
               )}
