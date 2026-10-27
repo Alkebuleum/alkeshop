@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "amid-7592b"
+  },
+  "targets": {
+    "amid-7592b": {
+      "storage": {
+        "alkeshop": ["amid-7592b-alkeshop"]
+      }
+    }
+  }
+}

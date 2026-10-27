@@ -5,6 +5,7 @@ import { Avatar, EmptyState, Icon, Pill } from "../components/ui";
 import { statusOf } from "./Orders";
 import { useWallet } from "../wallet/WalletProvider";
 import { useStore, sellerOrders, earnings } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
 import { colorFor } from "../lib/market";
 import { sellerShare } from "../lib/config";
 import { alke, initials, monthName, num, relativeDay, timeLeft, walletTail } from "../lib/format";
@@ -31,7 +32,7 @@ function TodoLink({ to, count, title, sub }) {
   );
 }
 
-export default function SellerCenter() {
+function SellerCenter() {
   const s = useStore();
   const { conn } = useWallet();
   const [view, setView] = useState("overview"); // overview | listings | orders
@@ -199,3 +200,5 @@ function OrderRow({ o }) {
     ? <Link to={`/orders/${o.id}`} className="flex items-center gap-3 border-b border-line py-3 text-ink no-underline last:border-b-0 hover:text-ink">{inner}</Link>
     : <div className="flex items-center gap-3 border-b border-line py-3 last:border-b-0">{inner}</div>;
 }
+
+export default withSignIn(SellerCenter, { what: "your seller center", connect: true });

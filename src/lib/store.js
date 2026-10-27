@@ -1,383 +1,313 @@
-// AlkeShop's data, kept in this browser (localStorage) until the AlkeShop
-// backend exists. Everything that reads or changes marketplace state goes
-// through this module, so swapping in an API later touches one place.
+// AlkeShop's data. Shared data lives in the "alkeshop" Firestore database and
+// is read live; every change goes through the shopApi function, which checks
+// who is asking (see functions/src/shop.js for the order lifecycle). Pages
+// read one snapshot with useStore() and call the actions below.
 //
-// Order lifecycle (`status`):
-//   product / credits: awaiting_payment → confirming → delivered (product) | completed (credits)
-//                      or failed (payment.failure says why: expired, declined, failed, underpaid)
-//   service:           requested → awaiting_payment → confirming → active → delivered → completed
-//                      or cancelled (seller declined / pay window passed), disputed
+// What a visitor can read: live listings and approved sellers. A signed-in
+// wallet adds its own orders (as buyer and seller), seller profile, listings
+// and payouts; staff read everything.
 import { useSyncExternalStore } from "react";
-import { PRICE_HOLD_MS, SERVICE_PAY_WINDOW_MS, REVIEW_WINDOW_MS, sellerShare } from "./config";
-import { sellers as seedSellers } from "./catalog";
+import { CREDITS_ENABLED, PRODUCT_REFUND_MS, sellerShare } from "./config";
+import { loadAuth, loadShop, loadStorage } from "./firebase";
 
-const KEY = "alkeshop:v1";
-const fresh = () => ({
-  seq: 10500,
+const FAVORITES_KEY = "alkeshop:favorites";
+const loadFavorites = () => { try { return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []; } catch { return []; } };
+
+const blank = () => ({
+  ready: false, // the public catalog has loaded
+  authReady: false, // we know whether someone is signed in
+  session: null, // { wallet, admin } for the signed-in wallet
+  privateReady: false, // that wallet's own data has loaded
+  listings: [],
+  sellers: {}, // by wallet
   orders: [],
-  messages: {},
-  credits: {},
-  sellers: {}, // seller profiles by lower-case wallet address
-  listings: [], // seller-created products and services
-  favorites: [],
+  messages: {}, // by order id, while an order is open
   payouts: [],
   audit: [],
-  settings: { creditsEnabled: true },
+  credits: {}, // Nuru Credits balances, once Credits come back
+  favorites: typeof localStorage === "undefined" ? [] : loadFavorites(),
+  settings: { creditsEnabled: CREDITS_ENABLED },
+  toast: null, // { id, text }
 });
 
-function load() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY));
-    return saved ? { ...fresh(), ...saved } : fresh();
-  } catch {
-    return fresh();
-  }
-}
-
-let state = load();
+let state = blank();
 const listeners = new Set();
-
-function commit(next) {
-  state = next;
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { }
-  listeners.forEach((l) => l());
-}
-
-// Another tab changed the data (e.g. the seller center open beside the shop).
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (e) => {
-    if (e.key !== KEY) return;
-    state = load();
-    listeners.forEach((l) => l());
-  });
-}
+const emit = () => listeners.forEach((l) => l());
+const set = (patch) => { state = { ...state, ...patch }; emit(); };
 
 export const getState = () => state;
 const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export const useStore = () => useSyncExternalStore(subscribe, getState, getState);
 
-// Applies `recipe` to a copy of the state and saves it.
-function update(recipe) {
-  const draft = structuredClone(state);
-  const out = recipe(draft);
-  commit(draft);
-  return out;
-}
+// For tests: render pages against a fixed state.
+export function setStateForTests(patch) { state = { ...blank(), ready: true, authReady: true, privateReady: true, ...patch }; emit(); }
 
-const now = () => Date.now();
 const lc = (a) => (a || "").toLowerCase();
-const msgId = () => now().toString(36) + Math.random().toString(36).slice(2, 6);
-const findOrder = (s, id) => s.orders.find((o) => o.id === id);
-const sellerName = (s, id) => s.sellers[id]?.name || seedSellers.find((x) => x.id === id)?.name || "Seller";
-const firstName = (name) => name.split(" ")[0];
 
-function say(s, orderId, from, text, extra = {}) {
-  (s.messages[orderId] ||= []).push({ id: msgId(), from, text, at: now(), ...extra });
+/* ---------------- Live data ---------------- */
+
+// Each kind of data can come from several queries (public, mine, staff);
+// `sources[kind][name]` holds each query's docs by id and is merged on change.
+const sources = { listings: {}, sellers: {}, contacts: {}, orders: {}, payouts: {}, audit: {} };
+const byNewest = (a, b) => (b.createdAt || b.at || 0) - (a.createdAt || a.at || 0);
+
+function merge() {
+  const all = (kind) => Object.assign({}, ...Object.values(sources[kind]));
+  const contacts = all("contacts");
+  const sellers = Object.fromEntries(Object.values(all("sellers")).map((p) => [p.id, { ...p, email: contacts[p.id]?.email }]));
+  set({
+    listings: Object.values(all("listings")).sort(byNewest),
+    sellers,
+    orders: Object.values(all("orders")).sort(byNewest),
+    payouts: Object.values(all("payouts")).sort(byNewest),
+    audit: Object.values(all("audit")).sort(byNewest),
+  });
 }
 
-function audit(s, who, text) {
-  s.audit.unshift({ at: now(), who, text });
-  s.audit = s.audit.slice(0, 200);
+let privateUnsubs = [];
+
+function watch(fs, q, kind, name, onFirst) {
+  let first = true;
+  return fs.onSnapshot(q, (snap) => {
+    sources[kind][name] = Object.fromEntries((snap.docs || [snap]).filter((d) => d.exists()).map((d) => [d.id, { ...d.data(), id: d.data().id || d.id }]));
+    merge();
+    if (first) { first = false; onFirst?.(); }
+  }, (e) => {
+    console.warn(`AlkeShop: ${kind}/${name}:`, e.message);
+    if (first) { first = false; onFirst?.(); }
+  });
+}
+
+function watchPrivate(fs, db, session) {
+  privateUnsubs.forEach((u) => u());
+  privateUnsubs = [];
+  for (const kind of ["listings", "sellers", "contacts", "orders", "payouts", "audit"]) {
+    for (const name of Object.keys(sources[kind])) if (name !== "public") delete sources[kind][name];
+  }
+  merge();
+  if (!session) { set({ privateReady: false }); return; }
+
+  const w = session.wallet;
+  const col = (c) => fs.collection(db, c);
+  const mine = (c, field) => fs.query(col(c), fs.where(field, "==", w));
+  let waiting = 2;
+  const loaded = () => { if (--waiting === 0) set({ privateReady: true }); };
+  privateUnsubs.push(
+    watch(fs, mine("orders", "buyer"), "orders", "buyer", loaded),
+    watch(fs, mine("orders", "sellerId"), "orders", "seller", loaded),
+    watch(fs, fs.doc(db, `sellers/${w}`), "sellers", "mine"),
+    watch(fs, fs.doc(db, `sellerContacts/${w}`), "contacts", "mine"),
+    watch(fs, mine("listings", "sellerId"), "listings", "mine"),
+    watch(fs, mine("payouts", "sellerId"), "payouts", "mine"),
+  );
+  if (session.admin) {
+    privateUnsubs.push(
+      watch(fs, col("orders"), "orders", "all"),
+      watch(fs, col("sellers"), "sellers", "all"),
+      watch(fs, col("sellerContacts"), "contacts", "all"),
+      watch(fs, col("listings"), "listings", "all"),
+      watch(fs, col("payouts"), "payouts", "all"),
+      watch(fs, fs.query(col("audit"), fs.orderBy("at", "desc"), fs.limit(200)), "audit", "all"),
+    );
+  }
+}
+
+// Starts reading the catalog and following sign-in. Called once by the app.
+let started = false;
+export async function startSync() {
+  if (started) return;
+  started = true;
+  const { fs, db } = await loadShop();
+  let pending = 2;
+  const loaded = () => { if (--pending === 0) set({ ready: true }); };
+  watch(fs, fs.query(fs.collection(db, "listings"), fs.where("status", "==", "live")), "listings", "public", loaded);
+  watch(fs, fs.query(fs.collection(db, "sellers"), fs.where("status", "==", "approved")), "sellers", "public", loaded);
+
+  const { m, auth } = await loadAuth();
+  m.onIdTokenChanged(auth, async (user) => {
+    const claims = user ? (await user.getIdTokenResult()).claims : {};
+    const session = claims.shopWallet ? { wallet: claims.shopWallet, admin: claims.shopAdmin === true } : null;
+    if (session?.wallet !== state.session?.wallet || session?.admin !== state.session?.admin) {
+      set({ session, privateReady: false });
+      watchPrivate(fs, db, session);
+    }
+    if (!state.authReady) set({ authReady: true });
+  });
+}
+
+// Follows one order's conversation while its page is open; returns the stop function.
+export function watchMessages(orderId) {
+  let stop = () => { };
+  let stopped = false;
+  loadShop().then(({ fs, db }) => {
+    if (stopped) return;
+    stop = fs.onSnapshot(fs.query(fs.collection(db, `orders/${orderId}/messages`), fs.orderBy("at")), (snap) => {
+      set({ messages: { ...state.messages, [orderId]: snap.docs.map((d) => ({ id: d.id, ...d.data() })) } });
+    }, (e) => console.warn("AlkeShop: messages:", e.message));
+  });
+  return () => { stopped = true; stop(); };
+}
+
+/* ---------------- Calling the server ---------------- */
+
+// WalletProvider registers how to make sure the connected wallet is signed in.
+let ensureSession = async () => { throw new Error("Connect a wallet first."); };
+export const setSessionProvider = (fn) => { ensureSession = fn; };
+
+let toastN = 0;
+export const showToast = (text) => set({ toast: { id: ++toastN, text } });
+export const dismissToast = () => set({ toast: null });
+
+const QUIET = /cancelled|rejected|declined/i;
+
+// Runs a shopApi operation as the connected wallet. Resolves with its result,
+// or with null after telling the person what went wrong.
+async function api(op, args = {}) {
+  try {
+    await ensureSession();
+    const { call } = await loadShop();
+    return await call("shopApi", { op, ...args });
+  } catch (e) {
+    const text = String(e?.message || e).replace(/^(FirebaseError: )?/, "");
+    if (!QUIET.test(text)) showToast(text);
+    return null;
+  }
+}
+
+// Waits (briefly) until a newly created order arrives from the database.
+function arrived(orderId, ms = 8000) {
+  return new Promise((resolve) => {
+    const has = () => state.orders.some((o) => o.id === orderId);
+    if (has()) return resolve(orderId);
+    const t = setTimeout(() => { un(); resolve(orderId); }, ms);
+    const un = subscribe(() => { if (has()) { clearTimeout(t); un(); resolve(orderId); } });
+  });
+}
+
+const safeName = (n) => n.replace(/[/\\#?\[\]*]/g, "_").slice(-200);
+
+// Uploads File objects into this wallet's folder; returns [{ name, size, path }].
+export async function uploadFiles(files) {
+  if (!files?.length) return [];
+  await ensureSession();
+  const { m, storage } = await loadStorage();
+  const batch = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  return Promise.all([...files].map(async (f) => {
+    const path = `uploads/${state.session.wallet}/${batch}/${safeName(f.name)}`;
+    await m.uploadBytes(m.ref(storage, path), f, { contentType: f.type || "application/octet-stream" });
+    return { name: f.name, size: f.size, path };
+  }));
+}
+
+// Uploads whichever entries are still local files ({ file }) and keeps the rest.
+async function withUploads(list = []) {
+  const local = list.filter((f) => f.file);
+  const up = await uploadFiles(local.map((f) => f.file));
+  return list.map((f) => (f.file ? up[local.indexOf(f)] : f));
+}
+
+async function tryUploads(fn) {
+  try { return await fn(); } catch (e) {
+    if (!QUIET.test(e?.message || "")) showToast(`Upload failed: ${e?.message || e}`);
+    return undefined;
+  }
 }
 
 /* ---------------- Buying ---------------- */
 
-// Opens a checkout for a product or a credit package; returns the order id.
-export function startCheckout({ kind, item, buyer }) {
-  return update((s) => {
-    const id = `AS-${++s.seq}`;
-    s.orders.unshift({
-      id, kind, buyer: lc(buyer), createdAt: now(), status: "awaiting_payment", holdUntil: now() + PRICE_HOLD_MS,
-      itemId: item.id, title: kind === "credits" ? `${item.credits.toLocaleString("en-US")} Nuru Credits` : item.title,
-      sellerId: kind === "credits" ? "nuru" : item.sellerId,
-      sellerName: kind === "credits" ? "Nuru" : sellerName(s, item.sellerId),
-      amount: item.price, credits: item.credits, license: item.license, version: item.version, size: item.size,
-      payment: {},
-    });
-    return id;
-  });
+// Opens a checkout for a product; resolves with the order id (or null).
+export async function startCheckout({ kind, item }) {
+  if (kind !== "product") { showToast("Nuru Credits aren't sold here yet."); return null; }
+  const r = await api("checkout", { listingId: item.id });
+  return r && arrived(r.orderId);
 }
 
-// Sends a service request. Nothing is charged until the seller accepts.
-export function requestService({ service, buyer, answers }) {
-  return update((s) => {
-    const id = `AS-${++s.seq}`;
-    s.orders.unshift({
-      id, kind: "service", buyer: lc(buyer), createdAt: now(), status: "requested",
-      itemId: service.id, title: service.title.replace(/^I will /, "").replace(/^./, (c) => c.toUpperCase()),
-      sellerId: service.sellerId, sellerName: sellerName(s, service.sellerId),
-      amount: service.price, days: service.days, revisionsLeft: service.revisions, answers, payment: {},
-    });
-    say(s, id, "buyer", answers.map((a) => `${a.q}: ${a.a || "(skipped)"}`).join("\n"), { files: answers.flatMap((a) => a.files || []) });
-    say(s, id, "system", `Request sent. ${firstName(sellerName(s, service.sellerId))} will accept or decline. Nothing has been charged.`);
-    return id;
-  });
+// Sends a service request; answers' files are File objects. Nothing is charged.
+export async function requestService({ service, answers }) {
+  const ready = await tryUploads(() => Promise.all(answers.map(async (a) => ({ a: a.a, files: await uploadFiles(a.files) }))));
+  if (!ready) return null;
+  const r = await api("requestService", { listingId: service.id, answers: ready });
+  return r && arrived(r.orderId);
 }
 
-// A payment transaction was submitted from the wallet.
-export function paymentSubmitted(orderId, { txHash, payer }) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "confirming";
-    o.payment = { txHash, payer: lc(payer), submittedAt: now(), stage: "sent" };
-  });
-}
+export const paymentSubmitted = (orderId, { txHash, payer }) => api("submitPayment", { orderId, txHash, payer });
+export const paymentDeclined = (orderId) => api("paymentDeclined", { orderId });
 
-export function paymentStage(orderId, stage, extra = {}) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    if (o?.status === "confirming") o.payment = { ...o.payment, stage, ...extra };
-  });
-}
-
-// The payment didn't go through. Services stay open so the buyer can retry.
-export function paymentFailed(orderId, failure, extra = {}) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    if (!o) return;
-    o.payment = { ...o.payment, failure, failedAt: now(), ...extra };
-    o.status = o.kind === "service" ? "awaiting_payment" : "failed";
-    if (o.kind === "service" && failure === "underpaid") o.status = "failed";
-  });
-}
-
-// Confirmed on chain: deliver what was bought.
-// `verified` is false when the amount couldn't be read from the transaction
-// (a relayed call); admin reconciliation checks those against the treasury.
-export function paymentConfirmed(orderId, { blockNumber, verified }) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    if (!o || o.status !== "confirming") return;
-    o.paidAt = now();
-    o.payment = { ...o.payment, stage: "confirmed", blockNumber, verified, failure: null };
-    if (o.kind === "product") o.status = "delivered";
-    if (o.kind === "credits") {
-      o.status = "completed";
-      s.credits[o.buyer] = (s.credits[o.buyer] || 0) + o.credits;
-    }
-    if (o.kind === "service") {
-      o.status = "active";
-      o.dueAt = now() + o.days * 86400000;
-      say(s, o.id, "system", `Payment confirmed. ${firstName(o.sellerName)} has been told to start.`);
-    }
-  });
+// Asks the server to look at a confirming payment now (it also checks every minute).
+export async function checkPayment(orderId) {
+  try {
+    const { call } = await loadShop();
+    await call("shopApi", { op: "checkPayment", orderId });
+  } catch { /* the server's own check will catch up */ }
 }
 
 export function toggleFavorite(id) {
-  update((s) => {
-    s.favorites = s.favorites.includes(id) ? s.favorites.filter((f) => f !== id) : [...s.favorites, id];
-  });
+  const favorites = state.favorites.includes(id) ? state.favorites.filter((f) => f !== id) : [...state.favorites, id];
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch { }
+  set({ favorites });
+}
+
+// Gets a short-lived link for a file and starts the download.
+export async function downloadFile({ path, orderId, listingId }) {
+  const r = await api("fileUrl", { path, orderId, listingId });
+  if (r?.url) window.location.assign(r.url);
 }
 
 /* ---------------- Order conversation ---------------- */
 
-export function sendMessage(orderId, from, text, files = []) {
-  update((s) => say(s, orderId, from, text, { files }));
-}
+const act = (orderId, action, extra = {}) => api("orderAction", { orderId, action, ...extra });
 
-export function acceptDelivery(orderId) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "completed";
-    o.completedAt = now();
-    say(s, orderId, "system", "You accepted the delivery. The order is complete.");
-  });
+export async function sendMessage(orderId, text, files = []) {
+  const up = await tryUploads(() => uploadFiles(files));
+  return up && act(orderId, "message", { text, files: up });
 }
-
-export function requestRevision(orderId, text) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "active";
-    o.revisionsLeft = Math.max(0, (o.revisionsLeft || 0) - 1);
-    say(s, orderId, "buyer", text || "Please revise the delivery.");
-    say(s, orderId, "system", `Revision requested. ${o.revisionsLeft} left.`);
-    o.revisionAt = now();
-  });
-}
-
-export function openDispute(orderId, reason) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "disputed";
-    o.disputedAt = now();
-    o.dispute = reason;
-    say(s, orderId, "system", "Dispute opened. AlkeShop support will review the conversation and files and reply here.");
-    audit(s, "System", `Dispute opened on ${orderId}: ${reason}`);
-  });
+export const acceptDelivery = (orderId) => act(orderId, "acceptDelivery");
+export const requestRevision = (orderId, text) => act(orderId, "revision", { text });
+export const openDispute = (orderId, text) => act(orderId, "dispute", { text });
+export const sellerAccept = (orderId) => act(orderId, "accept");
+export const sellerDecline = (orderId) => act(orderId, "decline");
+export async function sellerDeliver(orderId, text, files = []) {
+  const up = await tryUploads(() => uploadFiles(files));
+  return up && act(orderId, "deliver", { text, files: up });
 }
 
 /* ---------------- Selling ---------------- */
 
-export function applyAsSeller(address, profile) {
-  update((s) => {
-    s.sellers[lc(address)] = { ...profile, id: lc(address), payout: lc(address), status: "review", appliedAt: now() };
-    audit(s, "System", `Seller application from ${profile.name}`);
-  });
-}
+export const applyAsSeller = (_address, profile) => api("applySeller", profile);
 
-export function saveListing(address, listing) {
-  return update((s) => {
-    const id = listing.id || `${listing.kind}-${msgId()}`;
-    const i = s.listings.findIndex((l) => l.id === id);
-    const next = { ...listing, id, sellerId: lc(address), updatedAt: now(), createdAt: listing.createdAt || now() };
-    if (i >= 0) s.listings[i] = next; else s.listings.unshift(next);
-    if (next.status === "review") audit(s, "System", `Listing submitted for review: ${next.title}`);
-    return id;
-  });
-}
-
-export function sellerAccept(orderId) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "awaiting_payment";
-    o.payBy = now() + SERVICE_PAY_WINDOW_MS;
-    say(s, orderId, "system", `${firstName(o.sellerName)} accepted your request. Pay within 18 hours to start.`);
-  });
-}
-
-export function sellerDecline(orderId) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "cancelled";
-    o.closedReason = "Seller declined";
-    say(s, orderId, "system", `${firstName(o.sellerName)} declined this request. Nothing was charged.`);
-  });
-}
-
-export function sellerDeliver(orderId, note, files) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "delivered";
-    o.deliveredAt = now();
-    o.deliveries = (o.deliveries || 0) + 1;
-    say(s, orderId, "seller", note, { delivery: o.deliveries, files });
-  });
+// Saves a listing; product files may include { file } entries still to upload.
+export async function saveListing(_address, listing) {
+  const files = listing.kind === "product" ? await tryUploads(() => withUploads(listing.files)) : undefined;
+  if (listing.kind === "product" && !files) return null;
+  const r = await api("saveListing", { ...listing, ...(files ? { files } : {}) });
+  return r?.id || null;
 }
 
 /* ---------------- Administration ---------------- */
 
-export function reviewSeller(address, approve, staff) {
-  update((s) => {
-    const p = s.sellers[lc(address)];
-    p.status = approve ? "approved" : "rejected";
-    p.reviewedAt = now();
-    audit(s, staff, `${approve ? "approved" : "rejected"} seller ${p.name}`);
-  });
-}
-
-export function reviewListing(id, approve, staff, note = "") {
-  update((s) => {
-    const l = s.listings.find((x) => x.id === id);
-    l.status = approve ? "live" : "returned";
-    l.reviewNote = note;
-    audit(s, staff, `${approve ? "approved" : "returned"} listing ${l.title}${note ? ` · ${note}` : ""}`);
-  });
-}
-
-export function resolveDispute(orderId, refund, staff) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = refund ? "refunded" : "completed";
-    o.completedAt = now();
-    say(s, orderId, "system", refund ? `Support refunded ${o.amount} ALKE to the buyer.` : "Support closed the dispute in the seller's favor. The order is complete.");
-    audit(s, staff, `${refund ? "refunded" : "closed"} dispute on ${orderId}${refund ? `, ${o.amount} ALKE` : ""}`);
-  });
-}
-
-export function refundOrder(orderId, staff, reason) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.status = "refunded";
-    o.refundedAt = now();
-    audit(s, staff, `approved refund on ${orderId}, ${o.amount} ALKE · reason: ${reason}`);
-  });
-}
-
-export function markReconciled(orderId, staff) {
-  update((s) => {
-    const o = findOrder(s, orderId);
-    o.reconciled = true;
-    audit(s, staff, `checked payment for ${orderId} against the treasury`);
-  });
-}
-
-export function setCreditsEnabled(on, staff) {
-  update((s) => {
-    s.settings.creditsEnabled = on;
-    audit(s, staff, `${on ? "switched on" : "switched off"} Nuru Credit sales`);
-  });
-}
-
-export function recordPayout(sellerId, amount, staff) {
-  update((s) => {
-    s.payouts.unshift({ sellerId, amount, at: now() });
-    audit(s, staff, `approved payout of ${amount} ALKE to ${sellerName(s, sellerId)}`);
-  });
-}
+const staffOp = (action, args) => api("admin", { action, ...args });
+export const reviewSeller = (wallet, approve, staff) => staffOp("reviewSeller", { wallet, approve, staff });
+export const reviewListing = (id, approve, staff, note = "") => staffOp("reviewListing", { id, approve, staff, note });
+export const resolveDispute = (orderId, refund, staff) => staffOp("resolveDispute", { orderId, refund, staff });
+export const refundOrder = (orderId, staff, reason) => staffOp("refund", { orderId, staff, reason });
+export const markReconciled = (orderId, staff) => staffOp("reconcile", { orderId, staff });
+export const recordPayout = (sellerId, _amount, staff) => staffOp("payout", { sellerId, staff });
+export const setCreditsEnabled = () => showToast("Nuru Credits are switched off in this build.");
 
 /* ---------------- Derived ---------------- */
 
 export const ordersOf = (s, buyer) => s.orders.filter((o) => o.buyer === lc(buyer));
 export const sellerOrders = (s, sellerId) => s.orders.filter((o) => o.sellerId === lc(sellerId) && o.kind !== "credits");
+export const signedInAs = (s, conn) => !!conn && s.session?.wallet === lc(conn.address);
 
-// Seller money: available = completed sales not yet paid out; pending = paid but
-// still in progress or inside the review window.
-export function earnings(s, sellerId) {
+// Seller money: available = finished sales not yet paid out; pending = paid but
+// still in progress, or a product inside its refund window. The server
+// computes the same when staff record a payout.
+export function earnings(s, sellerId, now = Date.now()) {
   const mine = sellerOrders(s, sellerId);
-  const share = (o) => sellerShare(o.amount);
-  const done = mine.filter((o) => o.status === "completed" || (o.kind === "product" && o.status === "delivered" && now() - o.paidAt > 7 * 86400000));
+  const done = mine.filter((o) => o.status === "completed" || (o.kind === "product" && o.status === "delivered" && now - o.paidAt > PRODUCT_REFUND_MS));
   const pending = mine.filter((o) => ["active", "delivered"].includes(o.status) && !done.includes(o));
   const paidOut = s.payouts.filter((p) => p.sellerId === lc(sellerId)).reduce((t, p) => t + p.amount, 0);
-  return {
-    available: Math.max(0, done.reduce((t, o) => t + share(o), 0) - paidOut),
-    pending: pending.reduce((t, o) => t + share(o), 0),
-    paidOut,
-  };
+  const sum = (xs) => xs.reduce((t, o) => t + sellerShare(o.amount), 0);
+  return { available: Math.max(0, sum(done) - paidOut), pending: sum(pending), paidOut };
 }
-
-/* ---------------- Time-based changes ---------------- */
-
-// Runs every few seconds: expires price holds and pay windows, completes
-// deliveries after the review window, and lets the sample sellers from the
-// catalog accept and deliver so the service flow can be tried end to end.
-export function tick() {
-  const t = now();
-  const s0 = state;
-  const due = s0.orders.some((o) =>
-    (o.status === "awaiting_payment" && ((o.holdUntil && t > o.holdUntil) || (o.payBy && t > o.payBy))) ||
-    (o.status === "delivered" && o.kind === "service" && t - o.deliveredAt > REVIEW_WINDOW_MS) ||
-    (isSample(o.sellerId) && o.status === "requested" && t - o.createdAt > 6000) ||
-    (isSample(o.sellerId) && o.status === "active" && t - (o.revisionAt || o.paidAt) > 15000));
-  if (!due) return;
-  update((s) => {
-    for (const o of s.orders) {
-      if (o.status === "awaiting_payment" && o.holdUntil && t > o.holdUntil) {
-        o.status = "failed";
-        o.payment = { ...o.payment, failure: "expired", failedAt: t };
-      } else if (o.status === "awaiting_payment" && o.payBy && t > o.payBy) {
-        o.status = "cancelled";
-        o.closedReason = "Not paid in time";
-        say(s, o.id, "system", "The 18-hour payment window passed, so this request was closed. Nothing was charged.");
-      } else if (o.status === "delivered" && o.kind === "service" && t - o.deliveredAt > REVIEW_WINDOW_MS) {
-        o.status = "completed";
-        o.completedAt = t;
-        say(s, o.id, "system", "The review window passed, so the order completed automatically.");
-      } else if (isSample(o.sellerId) && o.status === "requested" && t - o.createdAt > 6000) {
-        o.status = "awaiting_payment";
-        o.payBy = t + SERVICE_PAY_WINDOW_MS;
-        say(s, o.id, "seller", "Thanks for the details. Happy to take this on.");
-        say(s, o.id, "system", `${firstName(o.sellerName)} accepted your request. Pay within 18 hours to start.`);
-      } else if (isSample(o.sellerId) && o.status === "active" && t - (o.revisionAt || o.paidAt) > 15000) {
-        o.status = "delivered";
-        o.deliveredAt = t;
-        o.deliveries = (o.deliveries || 0) + 1;
-        say(s, o.id, "seller", "Here is the delivery. Let me know if you'd like changes.", {
-          delivery: o.deliveries,
-          files: [{ name: `${o.itemId}-delivery-${o.deliveries}.zip`, size: 12_000_000, sample: true }],
-        });
-      }
-    }
-  });
-}
-
-const isSample = (sellerId) => !!seedSellers.find((x) => x.id === sellerId)?.sample;

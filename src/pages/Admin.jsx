@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import { EmptyState, Icon, LogoMark, Pill } from "../components/ui";
 import { statusOf } from "./Orders";
 import { useWallet } from "../wallet/WalletProvider";
-import AccountMenu, { accountName, isAdmin } from "../wallet/AccountMenu";
+import AccountMenu, { accountName } from "../wallet/AccountMenu";
+import { withSignIn } from "../wallet/SignIn";
 import {
-  useStore, reviewSeller, reviewListing, resolveDispute, refundOrder, setCreditsEnabled, recordPayout, markReconciled, earnings,
+  useStore, reviewSeller, reviewListing, resolveDispute, refundOrder, setCreditsEnabled, recordPayout, markReconciled, earnings, downloadFile,
 } from "../lib/store";
 import { rpc, explorerTx } from "../lib/chain";
-import { ADMIN_ADDRESSES, CREDITS_ENABLED, SHOP_TREASURY, feeOf } from "../lib/config";
+import { CREDITS_ENABLED, SHOP_TREASURY, feeOf } from "../lib/config";
 import { alke, date, num, refTail, time } from "../lib/format";
 
 const WATCHER_BEHIND_S = 5 * 60;
@@ -53,14 +54,14 @@ function Panel({ id, title, action, children }) {
 
 const Empty = ({ children }) => <p className="text-[15px] text-mute">{children}</p>;
 
-export default function Admin() {
+function Admin() {
   const s = useStore();
   const { conn, openConnect } = useWallet();
   const health = useChainHealth();
   const [view, setView] = useState("dashboard");
   const [days, setDays] = useState(7);
 
-  if (!conn || !isAdmin(conn)) {
+  if (!conn || !s.session?.admin) {
     return (
       <div className="min-h-screen">
         <EmptyState icon="shield" title="AlkeShop Admin" action={!conn && <button type="button" onClick={() => openConnect().catch(() => { })} className="btn-primary btn-sm">Connect a staff wallet</button>}>
@@ -122,7 +123,6 @@ export default function Admin() {
         </nav>
 
         <main className="flex min-w-0 flex-1 flex-col gap-6 p-5 md:p-8">
-          {!ADMIN_ADDRESSES.length && <div className="rounded-[14px] border border-peach/35 bg-peach/10 px-4 py-3 text-sm text-peach-text">No staff list is set (VITE_ADMIN_ADDRESSES), so any wallet can open this page. Set it before going live.</div>}
           {!SHOP_TREASURY && <div className="rounded-[14px] border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-[#FCA5A5]">No treasury address is set (VITE_SHOP_TREASURY), so checkout can't take payments.</div>}
           {health && (behind ? (
             <div role="alert" className="flex items-center gap-2.5 rounded-[14px] border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-[#FCA5A5]">
@@ -303,7 +303,11 @@ function ListingReview({ l, seller, staff }) {
         <Link to={`/${l.kind === "product" ? "products" : "services"}/${l.id}`} className="btn-text">Preview<Icon name="external" size={14} /></Link>
       </div>
       <p className="text-sm text-body">{l.about || l.scope}</p>
-      {l.files?.length > 0 && <p className="text-[13px] text-mute">Files: {l.files.map((f) => f.name).join(", ")}</p>}
+      {l.files?.length > 0 && (
+        <p className="flex flex-wrap gap-x-3 text-[13px] text-mute">Files:
+          {l.files.map((f) => <button key={f.path} type="button" onClick={() => downloadFile({ path: f.path, listingId: l.id })} className="font-semibold text-violet-text hover:text-violet-hover">{f.name}</button>)}
+        </p>
+      )}
       <label htmlFor={`note-${l.id}`} className="sr-only">Note to the seller</label>
       <input id={`note-${l.id}`} className="field" placeholder="Note to the seller (needed to return it)" value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="flex gap-2">
@@ -317,3 +321,5 @@ function ListingReview({ l, seller, staff }) {
 function ReconcileButton({ o, staff }) {
   return <button type="button" onClick={() => markReconciled(o.id, staff)} className="btn-text">Mark checked</button>;
 }
+
+export default withSignIn(Admin, { what: "AlkeShop Admin" });

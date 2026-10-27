@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Shell, { Page } from "../components/Shell";
 import { ServiceThumb } from "../components/Cards";
-import { Icon, Notice, Sheet, Stars } from "../components/ui";
+import { Icon, Loading, Notice, Sheet, Stars } from "../components/ui";
 import { DetailActions, SellerLink, Reviews, BuyBar } from "./Product";
 import { useWallet } from "../wallet/WalletProvider";
 import { useStore, requestService, ordersOf } from "../lib/store";
@@ -14,20 +14,21 @@ import NotFound from "./NotFound";
 // The seller's questions, answered before the request is sent.
 function RequestSheet({ service, seller, onClose, onSent }) {
   const [answers, setAnswers] = useState(service.needs.map((n) => ({ q: n.q, a: "", files: [] })));
+  const [busy, setBusy] = useState(false);
   const missing = service.needs.some((n, i) => !n.optional && (n.type === "file" ? !answers[i].files.length : !answers[i].a.trim()));
   const setAt = (i, patch) => setAnswers((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const first = seller.name.split(" ")[0];
 
   return (
     <Sheet title={`What ${first} needs from you`} subtitle={`${service.packageName} · ${alke(service.price)}`} onClose={onClose} wide>
-      <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (!missing) onSent(answers); }}>
+      <form className="flex flex-col gap-4" onSubmit={async (e) => { e.preventDefault(); if (missing || busy) return; setBusy(true); if (!(await onSent(answers))) setBusy(false); }}>
         {service.needs.map((n, i) => (
           <div key={n.q} className="flex flex-col gap-2">
             <label htmlFor={`need-${i}`} className="label">{n.q}{n.optional && <span className="font-medium text-mute"> (optional)</span>}</label>
             {n.type === "file" ? (
               <>
                 <input id={`need-${i}`} type="file" multiple
-                  onChange={(e) => setAt(i, { files: [...e.target.files].map((f) => ({ name: f.name, size: f.size })) })}
+                  onChange={(e) => setAt(i, { files: [...e.target.files] })}
                   className="text-sm text-body file:mr-3 file:min-h-[40px] file:rounded-full file:border file:border-line-2 file:bg-transparent file:px-4 file:font-bold file:text-ink" />
                 {answers[i].files.map((f) => <span key={f.name} className="hint">{f.name} · {fileSize(f.size)}</span>)}
               </>
@@ -37,7 +38,7 @@ function RequestSheet({ service, seller, onClose, onSent }) {
           </div>
         ))}
         <Notice tone="plain" icon="info">You pay only after {first} accepts your request. Nothing is charged now.</Notice>
-        <button type="submit" disabled={missing} className="btn-primary w-full">Send request</button>
+        <button type="submit" disabled={missing || busy} className="btn-primary w-full">{busy ? "Sending…" : "Send request"}</button>
       </form>
     </Sheet>
   );
@@ -50,7 +51,7 @@ export default function Gig() {
   const { conn, ensureConnected } = useWallet();
   const [asking, setAsking] = useState(false);
   const x = getService(s, id);
-  if (!x) return <NotFound />;
+  if (!x) return s.ready && s.authReady ? <NotFound /> : <Shell><Loading /></Shell>;
   const seller = getSeller(s, x.sellerId);
   const first = seller?.name.split(" ")[0];
   const cat = SERVICE_CATEGORIES.find((c) => c.id === x.category);
@@ -64,7 +65,11 @@ export default function Gig() {
       setAsking(true);
     } catch { }
   };
-  const send = (answers) => nav(`/orders/${requestService({ service: x, buyer: conn.address, answers })}`);
+  const send = async (answers) => {
+    const orderId = await requestService({ service: x, answers });
+    if (orderId) nav(`/orders/${orderId}`);
+    return orderId;
+  };
 
   return (
     <Shell>

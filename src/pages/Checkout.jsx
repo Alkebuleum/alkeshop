@@ -5,7 +5,8 @@ import { Cover, ServiceThumb } from "../components/Cards";
 import { HeaderButton, Icon, LogoMark, Notice, Spinner } from "../components/ui";
 import { useWallet, isNuruConn } from "../wallet/WalletProvider";
 import { accountName } from "../wallet/AccountMenu";
-import { useStore, paymentSubmitted, paymentFailed } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
+import { useStore, paymentSubmitted, paymentDeclined } from "../lib/store";
 import { getProduct, getService } from "../lib/market";
 import { LICENSES } from "../lib/catalog";
 import { planPayment, toAlke } from "../lib/payPlan";
@@ -100,7 +101,7 @@ function WalletBox({ conn, plan, onChange }) {
   );
 }
 
-export default function Checkout() {
+function Checkout() {
   const { orderId } = useParams();
   const s = useStore();
   const nav = useNavigate();
@@ -128,11 +129,17 @@ export default function Checkout() {
         { to: SHOP_TREASURY, value: amountWei(order.amount), data: orderCalldata(order.id) },
         `Pay ${alke(order.amount)}`,
       );
-      paymentSubmitted(order.id, { txHash: hash, payer });
+      // The ALKE has left the wallet now: keep trying to record it.
+      let recorded = null;
+      for (let i = 0; i < 3 && !recorded; i++) recorded = await paymentSubmitted(order.id, { txHash: hash, payer });
+      if (!recorded) {
+        setErr(`Your payment was sent, but AlkeShop couldn't record it. Contact support with order ${order.id} and payment reference ${hash}.`);
+        return;
+      }
       nav(`/orders/${order.id}/payment`, { replace: true });
     } catch (e) {
       if (e.rejected) {
-        paymentFailed(order.id, "declined");
+        await paymentDeclined(order.id);
         nav(`/orders/${order.id}/payment`, { replace: true });
       } else {
         setErr(e.shortMessage || e.message || String(e));
@@ -207,3 +214,5 @@ export default function Checkout() {
     </Shell>
   );
 }
+
+export default withSignIn(Checkout, { what: "this checkout", connect: true });

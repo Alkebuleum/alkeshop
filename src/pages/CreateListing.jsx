@@ -6,6 +6,7 @@ import { Cover } from "../components/Cards";
 import { HeaderButton, Icon, Notice } from "../components/ui";
 import { useWallet } from "../wallet/WalletProvider";
 import { useStore, saveListing } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
 import { colorFor } from "../lib/market";
 import { LICENSES, PRODUCT_CATEGORIES, SERVICE_CATEGORIES } from "../lib/catalog";
 import { FEE_LABEL, feeOf, sellerShare } from "../lib/config";
@@ -32,13 +33,13 @@ function Field({ id, label, hint, children }) {
   );
 }
 
-function Frame({ title, onSaveDraft, children }) {
+function Frame({ title, onSaveDraft, busy, children }) {
   return (
     <Shell footer={false}>
       <div className="mx-auto max-w-xl">
         <header className="flex h-[60px] items-center justify-between px-2">
           <div className="flex items-center gap-1"><HeaderButton to="/seller" icon="close" label="Close" /><h1 className="text-xl font-extrabold">{title}</h1></div>
-          <button type="button" onClick={onSaveDraft} className="btn-text pr-3">Save draft</button>
+          <button type="button" onClick={onSaveDraft} disabled={busy} className="btn-text pr-3">Save draft</button>
         </header>
         {children}
       </div>
@@ -67,24 +68,26 @@ function PriceRows({ price }) {
   );
 }
 
-export function CreateProduct() {
+function CreateProductForm() {
   const nav = useNavigate();
   const { conn, ok, editing } = useListingForm("product");
   const [f, setF] = useState(() => editing || { kind: "product", title: "", category: "business", about: "", bullets: [], files: [], version: "1.0", license: "commercial", price: "" });
+  const [busy, setBusy] = useState(false);
   if (!ok) return <Navigate to="/sell" replace />;
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
   const price = Number(f.price) || 0;
   const ready = f.title.trim().length >= 4 && f.about.trim().length >= 20 && f.files.length > 0 && price > 0;
 
-  const save = (status) => {
-    const formats = [...new Set(f.files.map((x) => FORMAT_OF(x.name)).filter(Boolean))];
-    saveListing(conn.address, { ...f, title: f.title.trim(), price, formats, status });
-    nav("/seller");
+  // New files upload when the listing is saved.
+  const save = async (status) => {
+    setBusy(true);
+    if (await saveListing(conn.address, { ...f, title: f.title.trim(), price, status })) nav("/seller");
+    else setBusy(false);
   };
-  const addFiles = (list) => setF((x) => ({ ...x, files: [...x.files, ...[...list].map((file) => ({ name: file.name, size: file.size }))] }));
+  const addFiles = (list) => setF((x) => ({ ...x, files: [...x.files, ...[...list].map((file) => ({ name: file.name, size: file.size, file }))] }));
 
   return (
-    <Frame title={editing ? "Edit product" : "New product"} onSaveDraft={() => save("draft")}>
+    <Frame title={editing ? "Edit product" : "New product"} onSaveDraft={() => save("draft")} busy={busy}>
       <form className="flex flex-col gap-7 px-5 pb-12" onSubmit={(e) => { e.preventDefault(); if (ready) save("review"); }}>
         {editing?.status === "returned" && editing.reviewNote && <Notice tone="peach" icon="info">Returned by review: {editing.reviewNote}</Notice>}
         <Section id="cp-basics" n="1" title="BASICS">
@@ -112,7 +115,7 @@ export function CreateProduct() {
             <Icon name="upload" size={18} />Add files
             <input type="file" multiple className="sr-only" onChange={(e) => addFiles(e.target.files)} />
           </label>
-          <Notice tone="plain" icon="info">Files go to the AlkeShop file service for a safety scan once it's connected. This build records their names and sizes only.</Notice>
+          <Notice tone="plain" icon="info">Files upload when you save. Buyers can download them only after paying; nobody else can.</Notice>
           <Field id="cp-ver" label="Version label"><input id="cp-ver" className="field" value={f.version} onChange={set("version")} /></Field>
         </Section>
 
@@ -136,7 +139,7 @@ export function CreateProduct() {
         </Section>
 
         <div className="flex flex-col gap-2">
-          <button type="submit" disabled={!ready} className="btn-primary w-full">Submit for review</button>
+          <button type="submit" disabled={!ready || busy} className="btn-primary w-full">{busy ? "Uploading and saving…" : "Submit for review"}</button>
           {!ready && <p className="text-center text-[13px] text-mute">Add a title, a description, at least one file and a price.</p>}
         </div>
       </form>
@@ -144,9 +147,10 @@ export function CreateProduct() {
   );
 }
 
-export function CreateService() {
+function CreateServiceForm() {
   const nav = useNavigate();
   const { conn, ok, editing } = useListingForm("service");
+  const [busy, setBusy] = useState(false);
   const [f, setF] = useState(() => editing || {
     kind: "service", title: "", category: "design", sub: "", scope: "", price: "", days: "4", revisions: "2",
     deliverables: [], needs: [], cancellation: "Full refund if delivery is more than 24 hours late. After delivery, use revisions or open a dispute.", available: true, maxActive: "3",
@@ -159,13 +163,14 @@ export function CreateService() {
   const price = Number(f.price) || 0;
   const ready = f.title.trim().length >= 6 && f.scope.trim().length >= 20 && price > 0 && Number(f.days) > 0 && f.deliverables.length > 0;
 
-  const save = (status) => {
-    saveListing(conn.address, { ...f, title: f.title.trim(), price, days: Number(f.days) || 1, revisions: Number(f.revisions) || 0, maxActive: Number(f.maxActive) || 1, status });
-    nav("/seller");
+  const save = async (status) => {
+    setBusy(true);
+    if (await saveListing(conn.address, { ...f, title: f.title.trim(), price, days: Number(f.days) || 1, revisions: Number(f.revisions) || 0, maxActive: Number(f.maxActive) || 1, status })) nav("/seller");
+    else setBusy(false);
   };
 
   return (
-    <Frame title={editing ? "Edit service" : "New service"} onSaveDraft={() => save("draft")}>
+    <Frame title={editing ? "Edit service" : "New service"} onSaveDraft={() => save("draft")} busy={busy}>
       <form className="flex flex-col gap-7 px-5 pb-12" onSubmit={(e) => { e.preventDefault(); if (ready) save("review"); }}>
         {editing?.status === "returned" && editing.reviewNote && <Notice tone="peach" icon="info">Returned by review: {editing.reviewNote}</Notice>}
         <Section id="cs-basics" n="1" title="BASICS">
@@ -234,7 +239,7 @@ export function CreateService() {
         </Section>
 
         <div className="flex flex-col gap-2">
-          <button type="submit" disabled={!ready} className="btn-primary w-full">Submit for review</button>
+          <button type="submit" disabled={!ready || busy} className="btn-primary w-full">{busy ? "Saving…" : "Submit for review"}</button>
           {!ready && <p className="text-center text-[13px] text-mute">Add a title, scope, price, delivery days and at least one deliverable.</p>}
           <Link to="/terms/seller" className="btn-text justify-center">Seller terms</Link>
         </div>
@@ -242,3 +247,6 @@ export function CreateService() {
     </Frame>
   );
 }
+
+export const CreateProduct = withSignIn(CreateProductForm, { what: "your listings", connect: true });
+export const CreateService = withSignIn(CreateServiceForm, { what: "your listings", connect: true });

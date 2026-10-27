@@ -7,3 +7,7 @@ npm-debug.log*
 
 # Local settings (treasury, staff wallets). See .env.example.
 .env
+!functions/.env
+firebase-debug.log
+firestore-debug.log
+storage-debug.log

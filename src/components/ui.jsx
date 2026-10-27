@@ -91,6 +91,11 @@ const TONES = {
   plain: "bg-raised text-body",
 };
 
+// Centered spinner for a page whose data is still loading.
+export function Loading() {
+  return <div role="status" aria-label="Loading" className="flex min-h-[50vh] items-center justify-center"><Spinner className="h-6 w-6" /></div>;
+}
+
 export function Pill({ tone = "plain", children, className = "" }) {
   return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-bold ${TONES[tone]} ${className}`}>{children}</span>;
 }

@@ -5,6 +5,7 @@ import { EmptyState, HeaderButton, Icon, LogoMark, Notice } from "../components/
 import { useWallet, isNuruConn } from "../wallet/WalletProvider";
 import { accountName } from "../wallet/AccountMenu";
 import { useStore, applyAsSeller } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
 import { walletTail } from "../lib/format";
 
 const COUNTRIES = ["Ghana", "Kenya", "Nigeria", "Senegal", "South Africa", "Ethiopia", "Tanzania", "Uganda", "Rwanda", "Côte d'Ivoire", "Cameroon", "Zambia", "Other"];
@@ -38,10 +39,11 @@ function Status({ profile }) {
   );
 }
 
-export default function Onboarding() {
+function Onboarding() {
   const s = useStore();
   const { conn, openConnect } = useWallet();
   const [step, setStep] = useState(1);
+  const [busy, setBusy] = useState(false);
   const [f, setF] = useState({ name: "", type: "Business", country: "Ghana", email: "", products: true, services: false, bio: "", portfolio: "", rights: false, terms: false });
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   const profile = conn && s.sellers[conn.address.toLowerCase()];
@@ -53,12 +55,14 @@ export default function Onboarding() {
     4: f.rights && f.terms,
   }[step];
 
-  const next = () => {
+  const next = async () => {
     if (step < 4) return setStep(step + 1);
-    applyAsSeller(conn.address, {
+    setBusy(true);
+    await applyAsSeller(conn.address, {
       name: f.name.trim(), type: f.type, country: f.country, email: f.email.trim(), bio: f.bio.trim(), portfolio: f.portfolio.trim(),
       sells: [f.products && "products", f.services && "services"].filter(Boolean),
     });
+    setBusy(false);
   };
 
   return (
@@ -149,7 +153,7 @@ export default function Onboarding() {
 
               <div className="flex gap-3">
                 {step > 1 && <button type="button" onClick={() => setStep(step - 1)} className="btn-secondary flex-1">Back</button>}
-                <button type="button" onClick={next} disabled={!valid} className="btn-primary flex-[2]">{step === 4 ? "Submit application" : "Continue"}</button>
+                <button type="button" onClick={next} disabled={!valid || busy} className="btn-primary flex-[2]">{step === 4 ? (busy ? "Submitting…" : "Submit application") : "Continue"}</button>
               </div>
             </>
           )}
@@ -158,3 +162,5 @@ export default function Onboarding() {
     </Shell>
   );
 }
+
+export default withSignIn(Onboarding, { what: "your seller application" });

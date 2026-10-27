@@ -4,8 +4,8 @@ import Shell, { PageHeader, Page } from "../components/Shell";
 import { ProductCard, ProductRow, SellerChip, ServiceRow } from "../components/Cards";
 import { Icon } from "../components/ui";
 import { useStore } from "../lib/store";
-import { allProducts, allServices, getSeller } from "../lib/market";
-import { PRODUCT_CATEGORIES, sellers } from "../lib/catalog";
+import { allProducts, allServices, allSellers, getSeller } from "../lib/market";
+import { PRODUCT_CATEGORIES } from "../lib/catalog";
 import { CREDITS_ENABLED } from "../lib/config";
 
 const DIVISIONS = [
@@ -29,11 +29,13 @@ export default function Home() {
   const s = useStore();
   const nav = useNavigate();
   const [q, setQ] = useState("");
+  // Listings arrive newest first.
   const products = allProducts(s);
-  const featured = products.filter((p) => p.featured);
-  const newest = [...products].sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1)).slice(0, 2);
-  const popular = allServices(s).filter((x) => x.popular);
-  const creators = ["kente-studio", "kofi-mensah", "aicha-diallo"].map((id) => sellers.find((x) => x.id === id));
+  const featured = products.slice(0, 4);
+  const newest = products.slice(4, 6);
+  const popular = allServices(s).slice(0, 3);
+  const creators = allSellers(s).slice(0, 3);
+  const empty = s.ready && !products.length && !popular.length;
   const seller = (id) => getSeller(s, id);
 
   return (
@@ -76,21 +78,33 @@ export default function Home() {
           </nav>
         </section>
 
-        <section aria-labelledby="featured-h" className="flex flex-col gap-3.5">
-          <SectionHead id="featured-h" title="Featured products" to="/products" />
-          <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4 md:gap-6">
-            {featured.slice(0, 4).map((p, i) => (
-              <div key={p.id} className={i > 1 ? "hidden md:block" : ""}><ProductCard product={p} seller={seller(p.sellerId)} /></div>
-            ))}
-          </div>
-        </section>
+        {empty && (
+          <section aria-labelledby="opening-h" className="flex flex-col items-start gap-2 rounded-[22px] border border-violet-edge bg-surface p-5 md:p-8">
+            <h2 id="opening-h" className="text-[19px] font-extrabold md:text-2xl">AlkeShop is just opening</h2>
+            <p className="text-sm leading-normal text-mute md:text-base">The first sellers are setting up. Have templates, guides or a skill to offer? Be one of the first.</p>
+            <Link to="/sell" className="btn-primary btn-sm mt-1">Become a Seller</Link>
+          </section>
+        )}
 
-        <section aria-labelledby="services-h" className="flex flex-col gap-2.5">
-          <SectionHead id="services-h" title="Popular services" to="/services" />
-          <div className="grid gap-2.5 md:grid-cols-3 md:gap-4">
-            {popular.map((x, i) => <div key={x.id} className={i > 1 ? "hidden md:block" : ""}><ServiceRow service={x} seller={seller(x.sellerId)} /></div>)}
-          </div>
-        </section>
+        {featured.length > 0 && (
+          <section aria-labelledby="featured-h" className="flex flex-col gap-3.5">
+            <SectionHead id="featured-h" title="New products" to="/products" />
+            <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4 md:gap-6">
+              {featured.map((p, i) => (
+                <div key={p.id} className={i > 1 ? "hidden md:block" : ""}><ProductCard product={p} seller={seller(p.sellerId)} /></div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {popular.length > 0 && (
+          <section aria-labelledby="services-h" className="flex flex-col gap-2.5">
+            <SectionHead id="services-h" title="Services" to="/services" />
+            <div className="grid gap-2.5 md:grid-cols-3 md:gap-4">
+              {popular.map((x, i) => <div key={x.id} className={i > 1 ? "hidden md:block" : ""}><ServiceRow service={x} seller={seller(x.sellerId)} /></div>)}
+            </div>
+          </section>
+        )}
 
         <div className="grid grid-cols-[minmax(0,1fr)] gap-7 md:grid-cols-2 md:gap-6">
           {CREDITS_ENABLED ? (
@@ -114,14 +128,18 @@ export default function Home() {
             <Link to="/sell" className="btn-dark btn-sm mt-1 self-start">Become a Seller</Link>
           </section>
 
-          <section aria-labelledby="new-h" className="flex flex-col gap-3">
-            <h2 id="new-h" className="h-section">New arrivals</h2>
-            {newest.map((p) => <ProductRow key={p.id} product={p} seller={seller(p.sellerId)} />)}
-          </section>
-          <section aria-labelledby="creators-h" className="flex flex-col gap-3">
-            <h2 id="creators-h" className="h-section">Recommended creators</h2>
-            <div className="grid grid-cols-3 gap-2.5">{creators.map((c) => <SellerChip key={c.id} seller={c} />)}</div>
-          </section>
+          {newest.length > 0 && (
+            <section aria-labelledby="new-h" className="flex flex-col gap-3">
+              <h2 id="new-h" className="h-section">More new arrivals</h2>
+              {newest.map((p) => <ProductRow key={p.id} product={p} seller={seller(p.sellerId)} />)}
+            </section>
+          )}
+          {creators.length > 0 && (
+            <section aria-labelledby="creators-h" className="flex flex-col gap-3">
+              <h2 id="creators-h" className="h-section">Creators</h2>
+              <div className="grid grid-cols-3 gap-2.5">{creators.map((c) => <SellerChip key={c.id} seller={c} />)}</div>
+            </section>
+          )}
         </div>
       </Page>
     </Shell>

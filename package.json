@@ -8,7 +8,9 @@
     "build": "vite build",
     "postbuild": "node -e \"require('fs').copyFileSync('docs/index.html', 'docs/404.html')\"",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:emulator": "firebase emulators:exec --only firestore --project amid-7592b \"node --test test/rules.emulator.js functions/test/shop.emulator.js\"",
+    "test:e2e": "firebase emulators:exec --only auth,functions,firestore,storage --project amid-7592b \"node --test test/e2e.emulator.js\""
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.3.0",

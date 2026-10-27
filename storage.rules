@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// AlkeShop's own bucket. A signed-in wallet may upload into its own folder;
+// nobody reads directly: downloads go through short-lived links from shopApi
+// (fileUrl), which checks the buyer has paid or is part of the order.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /uploads/{wallet}/{batch}/{name} {
+      allow create: if request.auth != null
+        && request.auth.token.get('shopWallet', '') == wallet
+        && request.resource.size < 500 * 1024 * 1024;
+    }
+  }
+}

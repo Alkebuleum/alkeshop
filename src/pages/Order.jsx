@@ -1,27 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import Shell from "../components/Shell";
-import { Avatar, EmptyState, HeaderButton, Icon, Notice, Pill, Sheet } from "../components/ui";
+import { Avatar, EmptyState, HeaderButton, Icon, Pill, Sheet } from "../components/ui";
 import { statusOf } from "./Orders";
 import { useWallet } from "../wallet/WalletProvider";
+import { withSignIn } from "../wallet/SignIn";
 import {
-  useStore, sendMessage, acceptDelivery, requestRevision, openDispute,
-  sellerAccept, sellerDecline, sellerDeliver,
+  useStore, watchMessages, sendMessage, acceptDelivery, requestRevision, openDispute,
+  sellerAccept, sellerDecline, sellerDeliver, downloadFile,
 } from "../lib/store";
 import { getSeller } from "../lib/market";
 import { REVIEW_WINDOW_MS, sellerShare } from "../lib/config";
 import { alke, day, dateTime, fileSize, initials, timeLeft } from "../lib/format";
-import { sellers as seedSellers } from "../lib/catalog";
 import NotFound from "./NotFound";
 
-const pickFiles = (list) => [...list].map((f) => ({ name: f.name, size: f.size }));
+const pickFiles = (list) => [...list];
 
-function FileChip({ f }) {
+// An attached file; opens a short-lived download link.
+function FileChip({ f, orderId }) {
   return (
-    <span className="mt-2 flex items-center gap-2 rounded-xl bg-black/20 px-3 py-2 text-[13px]">
+    <button type="button" onClick={() => downloadFile({ path: f.path, orderId })} aria-label={`Download ${f.name}`}
+      className="mt-2 flex w-full items-center gap-2 rounded-xl bg-black/20 px-3 py-2 text-left text-[13px] hover:bg-black/30">
       <Icon name="file" size={18} className="text-mute" />
       <span className="min-w-0 flex-1 truncate">{f.name} · {fileSize(f.size)}</span>
-    </span>
+      <Icon name="download" size={16} className="text-mute" />
+    </button>
   );
 }
 
@@ -29,9 +32,16 @@ function FileChip({ f }) {
 function TextSheet({ title, label, cta, withFiles, required = true, onClose, onSubmit }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    if (await onSubmit(text.trim(), files)) onClose();
+    else setBusy(false);
+  };
   return (
     <Sheet title={title} onClose={onClose} wide>
-      <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); onSubmit(text.trim(), files); onClose(); }}>
+      <form className="flex flex-col gap-3" onSubmit={submit}>
         <label htmlFor="sheet-text" className="label">{label}</label>
         <textarea id="sheet-text" rows={4} className="field" value={text} onChange={(e) => setText(e.target.value)} />
         {withFiles && (
@@ -41,7 +51,7 @@ function TextSheet({ title, label, cta, withFiles, required = true, onClose, onS
               className="text-sm text-body file:mr-3 file:min-h-[40px] file:rounded-full file:border file:border-line-2 file:bg-transparent file:px-4 file:font-bold file:text-ink" />
           </>
         )}
-        <button type="submit" disabled={required && !text} className="btn-primary w-full">{cta}</button>
+        <button type="submit" disabled={(required && !text) || busy} className="btn-primary w-full">{busy ? "Sending…" : cta}</button>
       </form>
     </Sheet>
   );
@@ -53,8 +63,7 @@ function DeliveryCard({ m, order, role, onSheet }) {
     <section aria-label={`Delivery ${m.delivery}`} className="flex flex-col gap-2 rounded-[18px] border border-violet-edge bg-surface p-4">
       <div className="flex items-baseline justify-between"><h2 className="font-extrabold">Delivery {m.delivery} from {order.sellerName.split(" ")[0]}</h2><span className="text-[13px] text-mute">{day(m.at)}, {new Date(m.at).toTimeString().slice(0, 5)}</span></div>
       <p className="text-[15px] text-body">{m.text}</p>
-      {(m.files || []).map((f) => <FileChip key={f.name} f={f} />)}
-      {m.files?.some((f) => f.sample) && <p className="text-[13px] text-mute">Sample delivery from a demo seller. There's no real file.</p>}
+      {(m.files || []).map((f) => <FileChip key={f.path} f={f} orderId={order.id} />)}
       {latest && role === "buyer" && (
         <div className="mt-2 flex flex-col gap-2">
           <button type="button" onClick={() => acceptDelivery(order.id)} className="btn-primary w-full">Accept and complete</button>
@@ -68,24 +77,26 @@ function DeliveryCard({ m, order, role, onSheet }) {
   );
 }
 
-export default function Order() {
+function Order() {
   const { orderId } = useParams();
   const s = useStore();
   const { conn, openConnect } = useWallet();
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
   const [sheet, setSheet] = useState(null);
+  const [sending, setSending] = useState(false);
   const endRef = useRef(null);
   const fileRef = useRef(null);
   const order = s.orders.find((o) => o.id === orderId);
   const msgs = s.messages[orderId] || [];
 
+  useEffect(() => watchMessages(orderId), [orderId]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [msgs.length]);
 
   if (!order) return <NotFound />;
   if (order.kind !== "service") return <Navigate to={`/orders/${order.id}/payment`} replace />;
   const me = conn?.address.toLowerCase();
-  const role = me === order.buyer ? "buyer" : me === order.sellerId ? "seller" : null;
+  const role = me === order.buyer ? "buyer" : me === order.sellerId ? "seller" : s.session?.admin ? "staff" : null;
   if (!conn || !role) {
     return (
       <Shell tab="none">
@@ -98,7 +109,6 @@ export default function Order() {
 
   const seller = getSeller(s, order.sellerId);
   const other = role === "buyer" ? { name: order.sellerName, color: seller?.color, dark: seller?.dark } : { name: `Buyer ${order.buyer.slice(-4).toUpperCase()}`, color: "#22232A" };
-  const sample = seedSellers.find((x) => x.id === order.sellerId)?.sample;
   const [label, tone] = statusOf(order);
   const banner = {
     requested: role === "seller" ? "New request · accept or decline" : "Request sent · waiting for the seller",
@@ -106,14 +116,17 @@ export default function Order() {
     active: order.dueAt ? `In progress · due ${day(order.dueAt)}` : "In progress",
     delivered: `Delivered · completes in ${timeLeft(order.deliveredAt + REVIEW_WINDOW_MS - Date.now())}`,
   }[order.status] || label;
-  const closed = ["completed", "cancelled", "refunded", "failed"].includes(order.status);
+  const closed = role === "staff" || ["completed", "cancelled", "refunded", "failed"].includes(order.status);
 
-  const send = (e) => {
+  const send = async (e) => {
     e.preventDefault();
-    if (!text.trim() && !files.length) return;
-    sendMessage(order.id, role, text.trim(), files);
-    setText("");
-    setFiles([]);
+    if ((!text.trim() && !files.length) || sending) return;
+    setSending(true);
+    if (await sendMessage(order.id, text.trim(), files)) {
+      setText("");
+      setFiles([]);
+    }
+    setSending(false);
   };
 
   return (
@@ -134,7 +147,6 @@ export default function Order() {
         </div>
 
         <main aria-label="Conversation" className="flex flex-1 flex-col gap-3 px-5 py-5">
-          {sample && role === "buyer" && <Notice tone="plain" icon="info">{order.sellerName} is a sample seller: replies and deliveries are simulated so you can try the whole flow.</Notice>}
           {order.paidAt && <p className="text-center text-[13px] text-mute">Paid {day(order.paidAt)}{order.dueAt ? ` · due ${day(order.dueAt)}` : ""}</p>}
           {msgs.map((m) => {
             if (m.delivery) return <DeliveryCard key={m.id} m={m} order={order} role={role} onSheet={setSheet} />;
@@ -144,7 +156,7 @@ export default function Order() {
               <div key={m.id} className={`flex max-w-[85%] flex-col ${mine ? "self-end items-end" : "self-start items-start"}`}>
                 <div className={`whitespace-pre-line rounded-[18px] px-4 py-2.5 text-[15px] leading-snug ${mine ? "rounded-br-md bg-violet text-night" : "rounded-bl-md bg-surface text-ink"}`}>
                   {m.text}
-                  {(m.files || []).map((f) => <FileChip key={f.name} f={f} />)}
+                  {(m.files || []).map((f) => <FileChip key={f.path} f={f} orderId={order.id} />)}
                 </div>
                 <span className="mt-1 text-[12px] text-mute">{dateTime(m.at)}</span>
               </div>
@@ -180,7 +192,7 @@ export default function Order() {
               <label htmlFor="msg" className="sr-only">Message {other.name}</label>
               <input id="msg" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Message ${other.name.split(" ")[0]}`}
                 className="min-h-[44px] min-w-0 flex-1 rounded-full border border-line bg-surface px-4 text-[15px] text-ink outline-none placeholder:text-dim focus:border-violet" />
-              <button type="submit" aria-label="Send" className="flex h-11 w-11 items-center justify-center rounded-full bg-ink text-night"><Icon name="send" size={18} /></button>
+              <button type="submit" disabled={sending} aria-label="Send" className="flex h-11 w-11 items-center justify-center rounded-full bg-ink text-night"><Icon name="send" size={18} /></button>
             </div>
           </form>
         )}
@@ -207,3 +219,5 @@ export default function Order() {
     </Shell>
   );
 }
+
+export default withSignIn(Order, { what: "this order", connect: true });

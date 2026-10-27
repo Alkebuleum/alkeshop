@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Shell, { Page } from "../components/Shell";
 import { Cover } from "../components/Cards";
-import { Avatar, HeaderButton, Icon, Notice, Stars } from "../components/ui";
+import { Avatar, HeaderButton, Icon, Loading, Notice, Stars } from "../components/ui";
 import { useWallet } from "../wallet/WalletProvider";
 import { useStore, startCheckout, toggleFavorite, ordersOf } from "../lib/store";
 import { getProduct, getSeller } from "../lib/market";
@@ -74,22 +74,6 @@ export function BuyBar({ price, sub, children }) {
   );
 }
 
-function Previews() {
-  return (
-    <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 md:mx-0 md:px-0">
-      <div role="img" aria-label="Preview: plan outline" className="flex h-40 w-[130px] flex-none flex-col gap-2 rounded-[14px] bg-white/90 p-3">
-        <div className="h-2 w-3/4 rounded bg-[#2B2D73]" />{[1, 2, 3].map((i) => <div key={i} className="h-1.5 rounded bg-[#D6D8E8]" />)}
-      </div>
-      <div role="img" aria-label="Preview: forecast sheet" className="grid h-40 w-[130px] flex-none grid-cols-3 content-start gap-1 rounded-[14px] bg-white/90 p-3">
-        {Array.from({ length: 15 }, (_, i) => <div key={i} className="h-3 rounded-sm" style={{ background: i < 3 ? "#2B2D73" : "#DCE3EC" }} />)}
-      </div>
-      <div role="img" aria-label="Preview: summary page" className="flex h-40 w-[130px] flex-none flex-col justify-end gap-2 rounded-[14px] bg-[#2B2D73] p-3">
-        <div className="h-2 w-2/3 rounded bg-white/80" /><div className="h-1.5 w-1/2 rounded bg-white/40" />
-      </div>
-    </div>
-  );
-}
-
 export default function Product() {
   const { id } = useParams();
   const s = useStore();
@@ -97,7 +81,7 @@ export default function Product() {
   const { conn, ensureConnected } = useWallet();
   const [err, setErr] = useState(null);
   const p = getProduct(s, id);
-  if (!p) return <NotFound />;
+  if (!p) return s.ready && s.authReady ? <NotFound /> : <Shell><Loading /></Shell>;
   const seller = getSeller(s, p.sellerId);
   const license = LICENSES[p.license] || LICENSES.commercial;
   const cat = PRODUCT_CATEGORIES.find((c) => c.id === p.category);
@@ -108,8 +92,9 @@ export default function Product() {
   const buy = async () => {
     setErr(null);
     try {
-      const c = await ensureConnected();
-      nav(`/checkout/${startCheckout({ kind: "product", item: p, buyer: c.address })}`);
+      await ensureConnected();
+      const orderId = await startCheckout({ kind: "product", item: p });
+      if (orderId) nav(`/checkout/${orderId}`);
     } catch (e) {
       if (!/cancelled/.test(e.message)) setErr(e.message);
     }
@@ -124,10 +109,6 @@ export default function Product() {
               <div className="absolute inset-x-4 top-3 z-10 md:static md:mb-4"><DetailActions back="/products" backLabel="Back to products" id={p.id} title={p.title} /></div>
               <Cover product={p} big className="h-[300px] rounded-none p-6 pt-20 md:h-[440px] md:rounded-[22px] md:p-8" />
             </div>
-            <section aria-labelledby="preview-h" className="hidden flex-col gap-3 md:mt-8 md:flex">
-              <h2 id="preview-h" className="h-section">Previews</h2>
-              <Previews />
-            </section>
           </div>
 
           <div className="flex flex-col gap-6 px-5 pt-5 md:px-0 md:pt-14">
@@ -160,10 +141,6 @@ export default function Product() {
                   {p.bullets.map((b) => <li key={b} className="flex gap-2 text-[15px] text-body"><Icon name="check" size={18} className="mt-0.5 text-ok" />{b}</li>)}
                 </ul>
               )}
-            </section>
-            <section aria-labelledby="preview-h-m" className="flex flex-col gap-3 md:hidden">
-              <h2 id="preview-h-m" className="h-section">Previews</h2>
-              <Previews />
             </section>
             <section aria-labelledby="refund-h" className="flex gap-3 rounded-[18px] bg-surface p-4">
               <Icon name="revise" className="mt-0.5 text-mute" />

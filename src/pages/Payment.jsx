@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import Shell from "../components/Shell";
 import { CopyButton, HeaderButton, Icon, Notice, Pill } from "../components/ui";
 import { useStore } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
 import { explorerTx } from "../lib/chain";
 import { MIN_CONFS, SLOW_AFTER_MS } from "../lib/config";
 import { alke, dateTime, fileSize, num, refTail, weekday } from "../lib/format";
@@ -156,7 +157,7 @@ function Failure({ order }) {
   );
 }
 
-export default function Payment() {
+function Payment() {
   const { orderId } = useParams();
   const s = useStore();
   const order = s.orders.find((o) => o.id === orderId);
@@ -167,3 +168,5 @@ export default function Payment() {
   if (order.status === "awaiting_payment") return <Navigate to={`/checkout/${order.id}`} replace />;
   return <Navigate to={`/orders/${order.id}`} replace />;
 }
+
+export default withSignIn(Payment, { what: "this payment", connect: true });

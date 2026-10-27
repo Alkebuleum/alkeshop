@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { WalletProvider } from "./wallet/WalletProvider";
 import PaymentWatcher from "./lib/PaymentWatcher";
+import Toast from "./components/Toast";
+import { startSync } from "./lib/store";
 import { CREDITS_ENABLED } from "./lib/config";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
@@ -43,6 +45,7 @@ export function AppRoutes() {
     <WalletProvider>
       <ScrollToTop />
       <PaymentWatcher />
+      <Toast />
       <Suspense fallback={null}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -74,6 +77,7 @@ export function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => { startSync().catch((e) => console.error("AlkeShop: couldn't load the shop", e)); }, []);
   return (
     <BrowserRouter>
       <AppRoutes />

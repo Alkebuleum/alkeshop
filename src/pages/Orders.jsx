@@ -4,6 +4,7 @@ import Shell, { Page } from "../components/Shell";
 import { EmptyState, HeaderButton, Pill } from "../components/ui";
 import { useWallet } from "../wallet/WalletProvider";
 import { useStore, ordersOf } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
 import { REVIEW_WINDOW_MS } from "../lib/config";
 import { alke, day, timeLeft } from "../lib/format";
 
@@ -57,7 +58,7 @@ function OrderCard({ o, now, action }) {
   );
 }
 
-export default function Orders() {
+function Orders() {
   const s = useStore();
   const { conn, openConnect } = useWallet();
   const [tab, setTab] = useState("open");
@@ -117,3 +118,5 @@ export default function Orders() {
     </Shell>
   );
 }
+
+export default withSignIn(Orders, { what: "your orders" });

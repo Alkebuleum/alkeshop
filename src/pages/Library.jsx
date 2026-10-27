@@ -2,32 +2,34 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import Shell, { PageHeader, Page } from "../components/Shell";
 import { Cover } from "../components/Cards";
-import { EmptyState, Icon, Notice, Pill, Sheet } from "../components/ui";
+import { EmptyState, Icon, Pill, Sheet } from "../components/ui";
 import { useWallet } from "../wallet/WalletProvider";
-import { useStore, ordersOf } from "../lib/store";
+import { withSignIn } from "../wallet/SignIn";
+import { useStore, ordersOf, downloadFile } from "../lib/store";
 import { getProduct } from "../lib/market";
 import { LICENSES, PRODUCT_CATEGORIES } from "../lib/catalog";
 import { date, fileSize, refTail } from "../lib/format";
 
-// Files come from the AlkeShop file service, which this build doesn't have yet.
-function DownloadSheet({ order, product, onClose }) {
+// The files bought with this order; each opens a short-lived download link.
+function DownloadSheet({ order, onClose }) {
   return (
     <Sheet title={order.title} subtitle={`${order.id} · ${(LICENSES[order.license] || LICENSES.commercial).label} license`} onClose={onClose}>
-      <Notice tone="violet" icon="info">
-        Your purchase is recorded (payment {refTail(order.payment.txHash)}). Downloads are served by the AlkeShop file service, which isn't connected in this build yet.
-      </Notice>
-      {product && (
-        <dl className="rows mt-3">
-          <div><dt>Formats</dt><dd>{(product.formats || []).join(", ")}</dd></div>
-          <div><dt>Files</dt><dd>{product.files}{product.size ? ` · ${fileSize(product.size)}` : ""}</dd></div>
-          {order.version && <div><dt>Version</dt><dd>{order.version}</dd></div>}
-        </dl>
-      )}
+      <div className="flex flex-col gap-2">
+        {(order.files || []).map((f) => (
+          <button key={f.path} type="button" onClick={() => downloadFile({ path: f.path, orderId: order.id })}
+            className="card flex items-center gap-3 p-3 text-left hover:border-line-2">
+            <Icon name="file" className="text-mute" />
+            <span className="min-w-0 flex-1"><span className="block truncate text-[15px] font-bold">{f.name}</span><span className="block text-[13px] text-mute">{fileSize(f.size)}</span></span>
+            <Icon name="download" size={18} className="text-violet-text" />
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-[13px] text-mute">Payment {refTail(order.payment.txHash)}{order.version ? ` · version ${order.version}` : ""}. Download again any time.</p>
     </Sheet>
   );
 }
 
-export default function Library() {
+function Library() {
   const s = useStore();
   const { conn, openConnect } = useWallet();
   const [cat, setCat] = useState("");
@@ -88,7 +90,9 @@ export default function Library() {
           </>
         )}
       </Page>
-      {open && <DownloadSheet order={open.o} product={open.p} onClose={() => setOpen(null)} />}
+      {open && <DownloadSheet order={open.o} onClose={() => setOpen(null)} />}
     </Shell>
   );
 }
+
+export default withSignIn(Library, { what: "your library" });

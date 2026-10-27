@@ -19,7 +19,8 @@ export function useAttention() {
   return ordersOf(s, conn.address).filter((o) => o.status === "delivered" && o.kind === "service" || (o.status === "awaiting_payment" && o.kind === "service")).length;
 }
 
-export const isAdmin = (c) => !!c && (!ADMIN_ADDRESSES.length || [c.address, c.signer].some((a) => a && ADMIN_ADDRESSES.includes(a.toLowerCase())));
+// Whether to show the Admin link; the server decides who is really staff.
+export const isAdmin = (c) => !!c && [c.address, c.signer].some((a) => a && ADMIN_ADDRESSES.includes(a.toLowerCase()));
 
 function MenuLink({ to, icon, children, onClick, count }) {
   return (

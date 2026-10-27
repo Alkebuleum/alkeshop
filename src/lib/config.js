@@ -31,3 +31,6 @@ export const CREDITS_ENABLED = false;
 export const JOLLOFSWAP_URL = "https://jollofswap.com";
 export const GET_ALKE_URL = `${JOLLOFSWAP_URL}/swap?from=USDC&to=ALKE`;
 export const P2P_URL = `${JOLLOFSWAP_URL}/p2p`;
+
+// Product money is the seller's once the refund window has passed.
+export const PRODUCT_REFUND_MS = 7 * 86400 * 1000;

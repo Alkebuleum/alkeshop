@@ -1,0 +1,17 @@
+{
+  "name": "alkeshop-functions",
+  "description": "AlkeShop backend: wallet sign-in, orders, payments, files",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "ethers": "^6.17.0",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^4.9.0"
+  }
+}

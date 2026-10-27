@@ -14,5 +14,5 @@ export default defineConfig({
   },
   // Built into docs/ and committed: GitHub Pages serves main /docs.
   build: { outDir: "docs" },
-  test: { environment: "node" },
+  test: { environment: "node", exclude: ["node_modules/**", "functions/**", "test/**"] },
 });

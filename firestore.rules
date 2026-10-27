@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// AlkeShop's own database ("alkeshop") in the shared Alkebuleum project.
+// Clients only read; every write goes through the shopApi function, which
+// checks who is asking. A signed-in wallet carries `shopWallet` (lower-case
+// address) and `shopAdmin` claims from shopAuth.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function me() {
+      return request.auth != null ? request.auth.token.get('shopWallet', '') : '';
+    }
+    function isAdmin() {
+      return request.auth != null && request.auth.token.get('shopAdmin', false) == true;
+    }
+    function isParty(order) {
+      return me() != '' && (order.buyer == me() || order.sellerId == me());
+    }
+
+    match /sellers/{wallet} {
+      allow read: if resource.data.status == 'approved' || me() == wallet || isAdmin();
+    }
+    match /sellerContacts/{wallet} {
+      allow read: if me() == wallet || isAdmin();
+    }
+    match /listings/{id} {
+      allow read: if resource.data.status == 'live' || (me() != '' && resource.data.sellerId == me()) || isAdmin();
+    }
+    match /orders/{id} {
+      allow read: if isParty(resource.data) || isAdmin();
+      match /messages/{messageId} {
+        allow read: if isAdmin() || isParty(get(/databases/$(database)/documents/orders/$(id)).data);
+      }
+    }
+    match /payouts/{id} {
+      allow read: if (me() != '' && resource.data.sellerId == me()) || isAdmin();
+    }
+    match /audit/{id} {
+      allow read: if isAdmin();
+    }
+  }
+}

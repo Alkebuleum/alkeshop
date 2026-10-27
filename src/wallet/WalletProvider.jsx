@@ -1,6 +1,7 @@
 import React, { Suspense, createContext, lazy, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { rpc } from "../lib/chain";
 import { balanceOf, planPayment, shortMessage, toAlke } from "../lib/payPlan";
+import { getState, setSessionProvider } from "../lib/store";
 
 const ConnectModal = lazy(() => import("./WalletModals").then((m) => ({ default: m.ConnectModal })));
 const SignModal = lazy(() => import("./WalletModals").then((m) => ({ default: m.SignModal })));
@@ -79,12 +80,41 @@ export function WalletProvider({ children }) {
     return () => window.ethereum.removeListener?.("accountsChanged", onAccounts);
   }, [conn?.type]);
 
+  // Signs a message (personal_sign) with `key`, the wallet's signing key.
+  const signMessage = async (c, message, key) => {
+    const hex = "0x" + [...new TextEncoder().encode(message)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    if (c.type === "nuru") {
+      const { nuruSign } = await import("../lib/nuru");
+      try {
+        return await nuruSign("personal_sign", [hex, key], (uri) => setSignQr({ uri, label: "Sign in to AlkeShop" }));
+      } finally {
+        setSignQr(null);
+      }
+    }
+    return window.ethereum.request({ method: "personal_sign", params: [hex, key] });
+  };
+
+  // Signs this wallet in to AlkeShop (one signature, no funds move). Shared
+  // while in flight so a connect and an action don't ask twice.
+  const signingIn = useRef(null);
+  const signIn = useCallback((c) => {
+    signingIn.current ||= import("../lib/session")
+      .then((m) => m.signIn(c, signMessage))
+      .catch((e) => { throw explainSendError(e); })
+      .finally(() => { signingIn.current = null; });
+    return signingIn.current;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const finishConnect = (c) => {
     setConn(c);
     save(c);
     setConnecting(null);
-    pending.current?.resolve(c);
-    pending.current = null;
+    if (pending.current) {
+      pending.current.resolve(c); // the action that asked will sign in when it needs to
+      pending.current = null;
+    } else if (getState().session?.wallet !== c.address.toLowerCase()) {
+      signIn(c).catch(() => { });
+    }
   };
 
   const cancelConnect = () => {
@@ -102,7 +132,26 @@ export function WalletProvider({ children }) {
 
   const ensureConnected = useCallback(() => (conn ? Promise.resolve(conn) : openConnect()), [conn, openConnect]);
 
-  const disconnect = useCallback(() => { setConn(null); save(null); }, []);
+  const disconnect = useCallback(() => {
+    setConn(null);
+    save(null);
+    import("../lib/session").then((m) => m.signOut()).catch(() => { });
+  }, []);
+
+  // Shop actions call this first: connect if needed, then sign in as that wallet.
+  const ensureRef = useRef(ensureConnected);
+  ensureRef.current = ensureConnected;
+  useEffect(() => setSessionProvider(async () => {
+    const c = await ensureRef.current();
+    if (getState().session?.wallet !== c.address.toLowerCase()) await signIn(c);
+    return c;
+  }), [signIn]);
+
+  // A different wallet than the signed-in one: drop the old session.
+  useEffect(() => {
+    const s = getState().session;
+    if (s && conn && s.wallet !== conn.address.toLowerCase()) import("../lib/session").then((m) => m.signOut()).catch(() => { });
+  }, [conn]);
 
   // The connected account's ALKE, in wei, kept fresh for the header, wallet
   // page and account menu. `signer` is the Nuru signing key, which holds ALKE
@@ -201,7 +250,7 @@ export function WalletProvider({ children }) {
   }, [ensureConnected, refreshBalance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <WalletCtx.Provider value={{ conn, openConnect, ensureConnected, disconnect, pay, balance, refreshBalance }}>
+    <WalletCtx.Provider value={{ conn, openConnect, ensureConnected, disconnect, pay, balance, refreshBalance, signIn }}>
       {children}
       <Suspense fallback={null}>
         {connecting && <ConnectModal prefer={connecting.prefer} onConnected={finishConnect} onClose={cancelConnect} />}
