@@ -20,3 +20,14 @@ export const SLOW_AFTER_MS = 2 * 60 * 1000; // "taking longer than usual"
 
 export const sellerShare = (price) => Math.round(price * (10000 - FEE_BPS)) / 10000;
 export const feeOf = (price) => Math.round(price * FEE_BPS) / 10000;
+
+// Nuru Credits are paused: the page, nav links and admin tab are hidden and
+// /credits goes to the wallet. The order flow behind them is kept; set this
+// to true to bring them back.
+export const CREDITS_ENABLED = false;
+
+// Where buyers get ALKE: JollofSwap swaps USDC or MAH into ALKE, and its P2P
+// market sells MAH for local money.
+export const JOLLOFSWAP_URL = "https://jollofswap.com";
+export const GET_ALKE_URL = `${JOLLOFSWAP_URL}/swap?from=USDC&to=ALKE`;
+export const P2P_URL = `${JOLLOFSWAP_URL}/p2p`;

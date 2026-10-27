@@ -92,7 +92,7 @@ function WalletBox({ conn, plan, onChange }) {
         </span>
         <button type="button" onClick={onChange} className="btn-text">Change</button>
       </div>
-      {short && <p className="text-sm text-peach-text">{plan.gasKeyEmpty ? "Your Nuru signing key needs a little ALKE for the network fee." : "Add ALKE in Nuru Wallet, then come back."} This price stays held until the timer ends.</p>}
+      {short && <p className="text-sm text-peach-text">{plan.gasKeyEmpty ? "Your Nuru signing key needs a little ALKE for the network fee." : "Top up your wallet, then come back."} This price stays held until the timer ends.</p>}
       {plan?.mode === "consolidate" && (
         <p className="text-sm text-peach-text">Your Nuru Account has {toAlke(plan.account)} ALKE. {toAlke(plan.topUp)} ALKE will first move from your signer key into it, then you pay. You'll approve twice.</p>
       )}
@@ -192,7 +192,7 @@ export default function Checkout() {
             {!conn ? (
               <button type="button" onClick={() => openConnect().catch(() => { })} className="btn-primary w-full">Connect Nuru Wallet</button>
             ) : plan?.mode === "short" ? (
-              <span className="btn w-full bg-raised font-bold text-dim">Not enough ALKE</span>
+              <Link to={`/wallet?back=${encodeURIComponent(`/checkout/${order.id}`)}${plan.shortBy > 0n ? `&need=${encodeURIComponent(toAlke(plan.shortBy))}` : ""}`} className="btn-primary w-full">Get ALKE</Link>
             ) : (
               <button type="button" onClick={submit} disabled={!canPay} className="btn-primary w-full">
                 {busy && <Spinner className="h-4 w-4 border-night/30 border-t-night" />}

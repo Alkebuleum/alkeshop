@@ -6,11 +6,14 @@ import { Icon } from "../components/ui";
 import { useStore } from "../lib/store";
 import { allProducts, allServices, getSeller } from "../lib/market";
 import { PRODUCT_CATEGORIES, sellers } from "../lib/catalog";
+import { CREDITS_ENABLED } from "../lib/config";
 
 const DIVISIONS = [
   { to: "/products", icon: "grid", bg: "#2B2D73", title: "Digital products", sub: "Templates, ebooks, kits, instant download" },
   { to: "/services", icon: "briefcase", bg: "#0F4C5C", title: "Hire a freelancer", sub: "Design, tech, writing, tutoring" },
-  { to: "/credits", icon: "sparkle", bg: "#FFB38A", dark: true, title: "Nuru Credits", sub: "Power advanced Nuru AI features" },
+  CREDITS_ENABLED
+    ? { to: "/credits", icon: "sparkle", bg: "#FFB38A", dark: true, title: "Nuru Credits", sub: "Power advanced Nuru AI features" }
+    : { to: "/wallet", icon: "coins", bg: "#FFB38A", dark: true, title: "Get ALKE", sub: "Top up your wallet through JollofSwap" },
 ];
 
 function SectionHead({ id, title, to, linkText = "See all" }) {
@@ -90,12 +93,21 @@ export default function Home() {
         </section>
 
         <div className="grid grid-cols-[minmax(0,1fr)] gap-7 md:grid-cols-2 md:gap-6">
-          <section aria-labelledby="credits-h" className="flex flex-col gap-2 rounded-[22px] border border-violet-edge bg-surface p-5 md:p-8">
-            <span className="self-start rounded-full bg-peach px-2.5 py-[3px] text-xs font-extrabold text-night">Nuru Credits</span>
-            <h2 id="credits-h" className="text-[19px] font-extrabold md:text-2xl">Do more with Nuru AI</h2>
-            <p className="text-sm leading-normal text-mute md:text-base">Prepaid credits for advanced models, voice and document analysis. Paid in ALKE.</p>
-            <Link to="/credits" className="btn-primary btn-sm mt-1 self-start">See credit packages</Link>
-          </section>
+          {CREDITS_ENABLED ? (
+            <section aria-labelledby="credits-h" className="flex flex-col gap-2 rounded-[22px] border border-violet-edge bg-surface p-5 md:p-8">
+              <span className="self-start rounded-full bg-peach px-2.5 py-[3px] text-xs font-extrabold text-night">Nuru Credits</span>
+              <h2 id="credits-h" className="text-[19px] font-extrabold md:text-2xl">Do more with Nuru AI</h2>
+              <p className="text-sm leading-normal text-mute md:text-base">Prepaid credits for advanced models, voice and document analysis. Paid in ALKE.</p>
+              <Link to="/credits" className="btn-primary btn-sm mt-1 self-start">See credit packages</Link>
+            </section>
+          ) : (
+            <section aria-labelledby="alke-h" className="flex flex-col gap-2 rounded-[22px] border border-violet-edge bg-surface p-5 md:p-8">
+              <span className="self-start rounded-full bg-peach px-2.5 py-[3px] text-xs font-extrabold text-night">ALKE</span>
+              <h2 id="alke-h" className="text-[19px] font-extrabold md:text-2xl">Need ALKE to shop?</h2>
+              <p className="text-sm leading-normal text-mute md:text-base">Swap USDC or MAH for ALKE on JollofSwap, or have someone send it to your wallet.</p>
+              <Link to="/wallet" className="btn-primary btn-sm mt-1 self-start">Get ALKE</Link>
+            </section>
+          )}
           <section aria-labelledby="sell-h" className="order-last flex flex-col gap-2 rounded-[22px] bg-violet p-5 text-night md:order-none md:p-8">
             <h2 id="sell-h" className="text-xl font-extrabold md:text-2xl">Turn your skills into ALKE</h2>
             <p className="text-sm font-medium leading-normal md:text-base">Sell templates, guides and services to the Nuru community. No inventory needed.</p>

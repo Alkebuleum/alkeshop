@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWallet, isNuruConn } from "./WalletProvider";
-import { balanceOf, toAlke } from "../lib/payPlan";
+import { toAlke, totalOf } from "../lib/payPlan";
 import { useStore, ordersOf } from "../lib/store";
-import { ADMIN_ADDRESSES } from "../lib/config";
+import { ADMIN_ADDRESSES, CREDITS_ENABLED } from "../lib/config";
 import { walletTail } from "../lib/format";
 import { CopyButton, Icon } from "../components/ui";
 
@@ -32,18 +32,12 @@ function MenuLink({ to, icon, children, onClick, count }) {
 }
 
 export default function AccountMenu() {
-  const { conn, openConnect, disconnect } = useWallet();
+  const { conn, openConnect, disconnect, balance } = useWallet();
   const s = useStore();
   const attention = useAttention();
   const [open, setOpen] = useState(false);
-  const [bal, setBal] = useState(undefined);
   const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open || !conn) return;
-    setBal(undefined);
-    balanceOf(conn.address).then(setBal).catch(() => setBal(null));
-  }, [open, conn]);
+  const bal = totalOf(balance);
 
   useEffect(() => {
     if (!open) return;
@@ -79,14 +73,15 @@ export default function AccountMenu() {
               <CopyButton value={conn.address} label="Copy wallet address" />
             </div>
             <p className="text-[13px] text-body">
-              {bal === undefined ? "Checking balance…" : bal === null ? "Balance unavailable" : `${toAlke(bal)} ALKE`}
-              {credits > 0 && <> · {credits.toLocaleString("en-US")} credits</>}
+              {bal != null ? `${toAlke(bal)} ALKE` : balance?.error ? "Balance unavailable" : "Checking balance…"}
+              {CREDITS_ENABLED && credits > 0 && <> · {credits.toLocaleString("en-US")} credits</>}
             </p>
           </div>
           <div className="border-t border-line pt-2">
             <MenuLink to="/orders" icon="inbox" onClick={close} count={attention}>My Orders</MenuLink>
             <MenuLink to="/library" icon="book" onClick={close}>My Library</MenuLink>
-            <MenuLink to="/credits" icon="sparkle" onClick={close}>Nuru Credits</MenuLink>
+            <MenuLink to="/wallet" icon="wallet" onClick={close}>Wallet and ALKE</MenuLink>
+            {CREDITS_ENABLED && <MenuLink to="/credits" icon="sparkle" onClick={close}>Nuru Credits</MenuLink>}
             {seller ? <MenuLink to="/seller" icon="store" onClick={close}>Seller center</MenuLink> : <MenuLink to="/sell" icon="store" onClick={close}>Become a Seller</MenuLink>}
             {isAdmin(conn) && <MenuLink to="/admin" icon="shield" onClick={close}>Admin</MenuLink>}
             <button type="button" onClick={() => { disconnect(); close(); }}

@@ -5,7 +5,7 @@ import { useParams } from "react-router-dom";
 import Shell, { PageHeader, Page } from "../components/Shell";
 import { Notice } from "../components/ui";
 import { LICENSES } from "../lib/catalog";
-import { FEE_LABEL } from "../lib/config";
+import { CREDITS_ENABLED, FEE_LABEL } from "../lib/config";
 import NotFound from "./NotFound";
 
 const PAGES = {
@@ -13,6 +13,7 @@ const PAGES = {
     title: "Help and support",
     body: [
       ["Paying", "AlkeShop takes ALKE on the Alkebuleum network. Connect Nuru Wallet by scanning a QR code with the Nuru app, or open AlkeShop inside the Nuru browser. You approve every payment in Nuru, and Nuru shows the network fee before you approve."],
+      ["Getting ALKE", "Swap USDC or MAH for ALKE on JollofSwap, or buy MAH with local money on JollofSwap P2P and swap that. Someone can also send ALKE straight to your wallet address. Your Wallet page shows your balance and links to each of these."],
       ["A payment is taking long", "Payments usually confirm in a moment. If yours is slow, it is still on the network and AlkeShop keeps checking. You can see it on the Alkebuleum Explorer from the payment screen."],
       ["Something went wrong with an order", "Open the order from My Orders and use the conversation, or open a dispute after a delivery. Keep payments and files on AlkeShop so support can help."],
       ["Contact", "[SUPPORT EMAIL OR CHANNEL]. Include your order number (it starts with AS-)."],
@@ -40,7 +41,7 @@ const PAGES = {
       ["Digital products", "Refunds within 7 days if files are missing, broken or not as described. A refunded product is removed from your Library."],
       ["Services", "Full refund if delivery is more than 24 hours late. After delivery, use revisions or open a dispute."],
       ["Underpayments", "If less than the order total arrives, the order isn't fulfilled and what you sent is returned to the wallet it came from."],
-      ["Nuru Credits", "Credits are prepaid units for Nuru services. They are not a coin, cannot be withdrawn and cannot be sent to another account."],
+      ...(CREDITS_ENABLED ? [["Nuru Credits", "Credits are prepaid units for Nuru services. They are not a coin, cannot be withdrawn and cannot be sent to another account."]] : []),
     ],
   },
   licenses: {

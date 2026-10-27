@@ -8,7 +8,7 @@ import {
   useStore, reviewSeller, reviewListing, resolveDispute, refundOrder, setCreditsEnabled, recordPayout, markReconciled, earnings,
 } from "../lib/store";
 import { rpc, explorerTx } from "../lib/chain";
-import { ADMIN_ADDRESSES, SHOP_TREASURY, feeOf } from "../lib/config";
+import { ADMIN_ADDRESSES, CREDITS_ENABLED, SHOP_TREASURY, feeOf } from "../lib/config";
 import { alke, date, num, refTail, time } from "../lib/format";
 
 const WATCHER_BEHIND_S = 5 * 60;
@@ -88,7 +88,7 @@ export default function Admin() {
     ["listings", "Listing moderation", toReview.length],
     ["disputes", "Orders and disputes", disputes.length],
     ["payments", "Payment reconciliation", exceptions.length],
-    ["credits", "Credit fulfillment"],
+    ...(CREDITS_ENABLED ? [["credits", "Credit fulfillment"]] : []),
     ["payouts", "Refunds and payouts", payable.length],
     ["audit", "Audit log"],
   ];
@@ -150,7 +150,7 @@ export default function Admin() {
                 <Figure label="Marketplace revenue" value={num(marketSales.reduce((t, o) => t + feeOf(o.amount), 0))} unit="ALKE" />
                 <Figure label="Digital product sales" value={paid.filter((o) => o.kind === "product").length} />
                 <Figure label="Service orders" value={paid.filter((o) => o.kind === "service").length} />
-                <Figure label="Nuru Credit sales" value={num(sum(paid.filter((o) => o.kind === "credits")))} unit="ALKE" />
+                {CREDITS_ENABLED && <Figure label="Nuru Credit sales" value={num(sum(paid.filter((o) => o.kind === "credits")))} unit="ALKE" />}
                 <Figure label="Active buyers / sellers" value={`${new Set(paid.map((o) => o.buyer)).size} / ${new Set(marketSales.map((o) => o.sellerId)).size}`} />
                 <Figure label="Refunds" value={s.orders.filter((o) => o.status === "refunded").length} />
                 <Figure label="Open disputes" value={disputes.length} />

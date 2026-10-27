@@ -1,11 +1,12 @@
 import React, { Suspense, createContext, lazy, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { rpc } from "../lib/chain";
-import { planPayment, shortMessage, toAlke } from "../lib/payPlan";
+import { balanceOf, planPayment, shortMessage, toAlke } from "../lib/payPlan";
 
 const ConnectModal = lazy(() => import("./WalletModals").then((m) => ({ default: m.ConnectModal })));
 const SignModal = lazy(() => import("./WalletModals").then((m) => ({ default: m.SignModal })));
 
 const STORAGE_KEY = "alkeshop:wallet";
+const BALANCE_REFRESH_MS = 15000;
 const WalletCtx = createContext(null);
 
 const load = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { return null; } };
@@ -103,6 +104,34 @@ export function WalletProvider({ children }) {
 
   const disconnect = useCallback(() => { setConn(null); save(null); }, []);
 
+  // The connected account's ALKE, in wei, kept fresh for the header, wallet
+  // page and account menu. `signer` is the Nuru signing key, which holds ALKE
+  // for network fees; null for other wallets. A failed check keeps the last
+  // known figures and sets `error`.
+  const [balance, setBalance] = useState(null); // null | { account, signer, at, error }
+  const connRef = useRef(conn);
+  connRef.current = conn;
+  const refreshBalance = useCallback(async () => {
+    if (!conn) return;
+    const current = () => connRef.current === conn; // drop answers for a wallet since switched
+    const signerAddr = conn.signer && conn.signer.toLowerCase() !== conn.address.toLowerCase() ? conn.signer : null;
+    try {
+      const [account, signer] = await Promise.all([balanceOf(conn.address), signerAddr ? balanceOf(signerAddr) : null]);
+      if (current()) setBalance({ account, signer, at: Date.now(), error: false });
+    } catch {
+      if (current()) setBalance((b) => ({ account: null, signer: null, at: null, ...b, error: true }));
+    }
+  }, [conn]);
+  useEffect(() => {
+    setBalance(null);
+    if (!conn) return;
+    refreshBalance();
+    const t = setInterval(() => document.visibilityState === "visible" && refreshBalance(), BALANCE_REFRESH_MS);
+    const onVisible = () => document.visibilityState === "visible" && refreshBalance();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
+  }, [conn, refreshBalance]);
+
   // Sends straight from the Nuru signer key (Nuru doesn't wrap it), so the key
   // is msg.sender and pays both the value and the gas. Waits until mined.
   const sendFromSigner = async (c, tx, value, label) => {
@@ -163,14 +192,16 @@ export function WalletProvider({ children }) {
       if (plan?.mode === "consolidate") {
         await sendFromSigner(c, { to: c.address }, plan.topUp, `Move ${toAlke(plan.topUp)} ALKE into your Nuru Account`);
       }
-      return { hash: await send(c, tx, value, label), payer: c.address };
+      const hash = await send(c, tx, value, label);
+      refreshBalance();
+      return { hash, payer: c.address };
     } catch (e) {
       throw explainSendError(e);
     }
-  }, [ensureConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ensureConnected, refreshBalance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <WalletCtx.Provider value={{ conn, openConnect, ensureConnected, disconnect, pay }}>
+    <WalletCtx.Provider value={{ conn, openConnect, ensureConnected, disconnect, pay, balance, refreshBalance }}>
       {children}
       <Suspense fallback={null}>
         {connecting && <ConnectModal prefer={connecting.prefer} onConnected={finishConnect} onClose={cancelConnect} />}

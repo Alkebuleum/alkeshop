@@ -5,6 +5,8 @@ import { rpc } from "./chain";
 export const WEI = 10n ** 18n;
 export const toAlke = (wei) => (Number(wei / 10n ** 15n) / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 });
 export const balanceOf = async (addr) => BigInt(await rpc("eth_getBalance", [addr, "latest"]));
+// All the ALKE a connection holds (Nuru Account plus signing key); null while unknown.
+export const totalOf = (b) => (b?.account == null ? null : b.account + (b.signer ?? 0n));
 const PRIMARY_SELECTOR = "0xc6dbdf61"; // primary()
 const primaryOf = (addr) => rpc("eth_call", [{ to: addr, data: PRIMARY_SELECTOR }, "latest"]).catch(() => null);
 

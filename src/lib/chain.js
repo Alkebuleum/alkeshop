@@ -6,6 +6,7 @@ export const CHAIN_CURRENCY = "ALKE";
 export const EXPLORER_URL = "https://alkescan.com";
 
 export const explorerTx = (hash) => `${EXPLORER_URL}/tx/${hash}`;
+export const explorerAddress = (addr) => `${EXPLORER_URL}/address/${addr}`;
 
 let _reqId = 1;
 

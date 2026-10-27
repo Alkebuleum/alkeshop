@@ -1,13 +1,16 @@
 import React, { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import AccountMenu, { useAttention } from "../wallet/AccountMenu";
+import { useWallet } from "../wallet/WalletProvider";
+import { toAlke, totalOf } from "../lib/payPlan";
+import { CREDITS_ENABLED } from "../lib/config";
 import { HeaderButton, Icon, Logo } from "./ui";
 
 const TABS = [
   { id: "home", to: "/", icon: "home", label: "Home" },
   { id: "products", to: "/products", icon: "grid", label: "Products" },
   { id: "services", to: "/services", icon: "briefcase", label: "Services" },
-  { id: "credits", to: "/credits", icon: "sparkle", label: "Credits" },
+  { id: "wallet", to: "/wallet", icon: "wallet", label: "Wallet" },
   { id: "library", to: "/library", icon: "book", label: "Library" },
 ];
 
@@ -45,6 +48,20 @@ function DesktopSearch() {
   );
 }
 
+// The connected wallet's ALKE, linking to the wallet page.
+function BalanceChip() {
+  const { conn, balance } = useWallet();
+  if (!conn) return null;
+  const total = totalOf(balance);
+  return (
+    <Link to="/wallet" aria-label={total == null ? "Wallet" : `Wallet, ${toAlke(total)} ALKE`}
+      className="flex h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-sm font-bold text-ink no-underline hover:border-violet hover:text-ink">
+      <Icon name="wallet" size={16} className="text-violet-text" />
+      {total == null ? "ALKE" : `${toAlke(total)} ALKE`}
+    </Link>
+  );
+}
+
 // Desktop header (canvas D1). Hidden on phones, where each screen has its own header.
 function DesktopHeader() {
   const attention = useAttention();
@@ -56,7 +73,7 @@ function DesktopHeader() {
         <nav aria-label="Main" className="flex items-center gap-6">
           <NavLink to="/products" className={navCls}>Products</NavLink>
           <NavLink to="/services" className={navCls}>Services</NavLink>
-          <NavLink to="/credits" className={navCls}>Nuru Credits</NavLink>
+          {CREDITS_ENABLED && <NavLink to="/credits" className={navCls}>Nuru Credits</NavLink>}
         </nav>
         <DesktopSearch />
         <div className="ml-auto flex items-center gap-5">
@@ -64,6 +81,7 @@ function DesktopHeader() {
           <NavLink to="/orders" className={navCls}>
             Orders{attention > 0 && <span className="ml-1.5 rounded-full bg-peach px-1.5 text-xs font-extrabold text-night">{attention}</span>}
           </NavLink>
+          <BalanceChip />
           <AccountMenu />
         </div>
       </div>

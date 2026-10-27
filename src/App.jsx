@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { WalletProvider } from "./wallet/WalletProvider";
 import PaymentWatcher from "./lib/PaymentWatcher";
+import { CREDITS_ENABLED } from "./lib/config";
 import Home from "./pages/Home";
 import Products from "./pages/Products";
 import Product from "./pages/Product";
@@ -9,6 +10,7 @@ import Services from "./pages/Services";
 import Gig from "./pages/Gig";
 import Seller from "./pages/Seller";
 import Credits from "./pages/Credits";
+import Wallet from "./pages/Wallet";
 import Checkout from "./pages/Checkout";
 import Payment from "./pages/Payment";
 import Library from "./pages/Library";
@@ -50,7 +52,8 @@ export function AppRoutes() {
           <Route path="/services" element={<Services />} />
           <Route path="/services/:id" element={<Gig />} />
           <Route path="/sellers/:id" element={<Seller />} />
-          <Route path="/credits" element={<Credits />} />
+          <Route path="/credits" element={CREDITS_ENABLED ? <Credits /> : <Navigate to="/wallet" replace />} />
+          <Route path="/wallet" element={<Wallet />} />
           <Route path="/checkout/:orderId" element={<Checkout />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:orderId" element={<Order />} />
