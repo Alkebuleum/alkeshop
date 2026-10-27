@@ -94,6 +94,7 @@ function Footer() {
     <footer className="mt-16 hidden border-t border-line md:block">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-6 px-8 py-8 text-sm">
         <nav aria-label="Footer" className="flex flex-wrap gap-6">
+          <Link to="/sell">Sell on AlkeShop</Link>
           <Link to="/help">Help and support</Link>
           <Link to="/terms/buyer">Buyer terms</Link>
           <Link to="/terms/seller">Seller terms</Link>

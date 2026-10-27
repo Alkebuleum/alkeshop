@@ -79,8 +79,8 @@ function SellerCenter() {
             </div>
             <h1 className="hidden text-[32px] font-extrabold tracking-[-0.03em] md:block">{NAV.find(([k]) => k === view)[1]}</h1>
             <div className="flex gap-2">
-              <Link to="/seller/new-product" className="btn-primary btn-sm"><Icon name="plus" size={18} /><span className="hidden sm:inline">New product</span><span className="sm:hidden">New</span></Link>
-              <Link to="/seller/new-service" className="btn-secondary btn-sm hidden sm:inline-flex">New service</Link>
+              <Link to="/seller/new-product" className="btn-primary btn-sm"><Icon name="plus" size={18} /><span className="hidden sm:inline">New product</span><span className="sm:hidden">Product</span></Link>
+              <Link to="/seller/new-service" className="btn-secondary btn-sm"><Icon name="plus" size={18} /><span className="hidden sm:inline">New service</span><span className="sm:hidden">Service</span></Link>
             </div>
           </header>
 
