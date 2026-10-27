@@ -1,10 +1,11 @@
 // Wallet dialogs (connect + Nuru approval QR). Split out of WalletProvider so
 // the QR, Nuru and ethers code only load when someone actually connects.
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Icon, LogoMark, Sheet, Spinner } from "../components/ui";
 import { connectWallet, hasWallet } from "../lib/wallet";
-import { nuruConnect, nuruInjected, nuruBrowserConnect, NURU_PLAY_STORE } from "../lib/nuru";
+import { nuruConnect, nuruBrowserConnect, NURU_PLAY_STORE } from "../lib/nuru";
+import { inNuruApp, nuruInjected } from "../lib/nuruBrowser";
 
 function QrBox({ uri }) {
   return (
@@ -33,6 +34,7 @@ export function ConnectModal({ prefer = "nuru", onConnected, onClose }) {
   const [busy, setBusy] = useState(null); // "nuru" | "injected"
   const [err, setErr] = useState(null);
   const inNuru = !!nuruInjected();
+  const nuruNoBridge = !inNuru && inNuruApp(); // Nuru's browser, but its wallet didn't load
 
   const run = async (kind, fn) => {
     setErr(null);
@@ -47,6 +49,14 @@ export function ConnectModal({ prefer = "nuru", onConnected, onClose }) {
     }
   };
 
+  // Inside Nuru, go straight to its approval sheet: one tap, no QR.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!inNuru || started.current) return;
+    started.current = true;
+    run("nuru", nuruBrowserConnect);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const nuruIcon = <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet"><LogoMark size={24} fg="#0B0B0F" /></span>;
   const otherIcon = <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-raised text-body"><Icon name="wallet" /></span>;
 
@@ -54,10 +64,15 @@ export function ConnectModal({ prefer = "nuru", onConnected, onClose }) {
     <Sheet title={uri ? "Scan with Nuru" : "Connect a wallet"} subtitle={uri ? null : "Pay and get paid in ALKE on Alkebuleum"} onClose={onClose}>
       {inNuru ? (
         <div className="space-y-3">
-          <p className="text-sm text-mute">You're in the Nuru browser. Approve the connection in Nuru.</p>
+          <p className="text-sm text-mute">{busy ? "Approve the connection in Nuru." : "You're in the Nuru browser. Connect directly, no QR code needed."}</p>
           <button type="button" onClick={() => run("nuru", nuruBrowserConnect)} disabled={!!busy} className="btn-primary w-full">
-            {busy && <Spinner className="h-4 w-4 border-night/30 border-t-night" />}Connect Nuru Wallet
+            {busy && <Spinner className="h-4 w-4 border-night/30 border-t-night" />}{busy ? "Waiting for Nuru…" : "Connect Nuru Wallet"}
           </button>
+        </div>
+      ) : nuruNoBridge ? (
+        <div className="space-y-3">
+          <p className="text-sm text-mute">Nuru's wallet didn't load on this page. Reload it to connect directly.</p>
+          <button type="button" onClick={() => window.location.reload()} className="btn-primary w-full">Reload page</button>
         </div>
       ) : uri ? (
         <div className="space-y-4 text-center">

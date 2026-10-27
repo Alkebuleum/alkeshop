@@ -13,6 +13,7 @@
 import { ethers } from "ethers";
 import { ensureSignedIn, loadRealtimeDb } from "./firebase";
 import { RPC_URL, CHAIN_ID } from "./chain";
+import { nuruInjected } from "./nuruBrowser";
 
 const TIMEOUT_MS = 180_000;
 const RELAY_URL = "https://relay.alkebuleum.com";
@@ -194,13 +195,20 @@ export async function nuruSendFromSigner(conn, { to, data = "0x", value = 0n, ga
 
 /* -------- Inside the Nuru in-app browser (window.ethereum._isNuruWallet) -------- */
 
-export const nuruInjected = () => (typeof window !== "undefined" && window.ethereum?._isNuruWallet ? window.ethereum : null);
+export { nuruInjected };
 
 // The Nuru browser exposes the signing key as the account and the Nuru Account
 // via nuru_getIdentity; it wraps txs through the Nuru Account itself.
-export async function nuruBrowserConnect() {
+// `silent` reads an existing approval (eth_accounts) and never prompts;
+// it resolves null when this site isn't connected in Nuru.
+export async function nuruBrowserConnect({ silent = false } = {}) {
   const eth = nuruInjected();
-  const [key] = await eth.request({ method: "eth_requestAccounts" });
+  if (!eth) throw new Error("Nuru's wallet didn't load on this page. Reload it and try again.");
+  const [key] = (await eth.request({ method: silent ? "eth_accounts" : "eth_requestAccounts" })) || [];
+  if (!key) {
+    if (silent) return null;
+    throw new Error("Nuru didn't share an account.");
+  }
   let identity = null;
   try { identity = await eth.request({ method: "nuru_getIdentity" }); } catch { }
   return {

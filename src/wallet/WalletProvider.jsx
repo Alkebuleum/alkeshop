@@ -2,6 +2,7 @@ import React, { Suspense, createContext, lazy, useCallback, useContext, useEffec
 import { rpc } from "../lib/chain";
 import { balanceOf, planPayment, shortMessage, toAlke } from "../lib/payPlan";
 import { getState, setSessionProvider } from "../lib/store";
+import { nuruInjected, revokeNuruBrowser } from "../lib/nuruBrowser";
 
 const ConnectModal = lazy(() => import("./WalletModals").then((m) => ({ default: m.ConnectModal })));
 const SignModal = lazy(() => import("./WalletModals").then((m) => ({ default: m.SignModal })));
@@ -10,7 +11,12 @@ const STORAGE_KEY = "alkeshop:wallet";
 const BALANCE_REFRESH_MS = 15000;
 const WalletCtx = createContext(null);
 
-const load = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { return null; } };
+const load = () => {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { }
+  // Inside Nuru only its own browser connection applies (no QR sessions).
+  return nuruInjected() && c?.type !== "nuru-browser" ? null : c;
+};
 const save = (c) => { try { c ? localStorage.setItem(STORAGE_KEY, JSON.stringify(c)) : localStorage.removeItem(STORAGE_KEY); } catch { } };
 
 export const isNuruConn = (c) => c?.type === "nuru" || c?.type === "nuru-browser";
@@ -59,9 +65,30 @@ export function WalletProvider({ children }) {
   const [signQr, setSignQr] = useState(null); // { uri, label }
   const pending = useRef(null); // { resolve, reject } for openConnect()
 
+  // Inside Nuru: pick up the key and Nuru Account it shares with this site,
+  // without prompting, on load and whenever either is switched in the app
+  // (an empty answer means the site was disconnected there).
+  useEffect(() => {
+    const eth = nuruInjected();
+    if (!eth) return;
+    const sync = async () => {
+      const { nuruBrowserConnect } = await import("../lib/nuru");
+      const next = await nuruBrowserConnect({ silent: true }).catch(() => null);
+      setConn((prev) => (prev && next && prev.address === next.address && prev.signer === next.signer ? prev : next));
+      save(next);
+    };
+    sync();
+    eth.on?.("accountsChanged", sync);
+    eth.on?.("nuruIdentityChanged", sync);
+    return () => {
+      eth.removeListener?.("accountsChanged", sync);
+      eth.removeListener?.("nuruIdentityChanged", sync);
+    };
+  }, []);
+
   // A browser-wallet session is only kept while the wallet still exposes the account.
   useEffect(() => {
-    if (conn?.type !== "injected" && conn?.type !== "nuru-browser") return;
+    if (conn?.type !== "injected") return;
     if (!window.ethereum) { setConn(null); save(null); return; }
     window.ethereum.request({ method: "eth_accounts" }).then((accs) => {
       if (!accs?.length) { setConn(null); save(null); }
@@ -133,6 +160,7 @@ export function WalletProvider({ children }) {
   const ensureConnected = useCallback(() => (conn ? Promise.resolve(conn) : openConnect()), [conn, openConnect]);
 
   const disconnect = useCallback(() => {
+    revokeNuruBrowser();
     setConn(null);
     save(null);
     import("../lib/session").then((m) => m.signOut()).catch(() => { });
