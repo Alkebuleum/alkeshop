@@ -3,7 +3,8 @@
 //
 //   shopAuth  — wallet sign-in: verifies a signature, returns a Firebase
 //               custom token whose claims carry the wallet (and staff flag)
-//   shopApi   — every shop action: { op, ...args } (see src/shop.js)
+//   shopApi   — every shop action: { op, ...args } (see src/shop.js); emails
+//               sellers through Brevo with the BREVO_API_KEY secret
 //   shopTick  — every minute: settles payments and runs order timers
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -40,7 +41,7 @@ exports.shopAuth = functions.https.onCall(async (data) => {
   }
 });
 
-exports.shopApi = functions.https.onCall(async (data, context) => {
+exports.shopApi = functions.runWith({ secrets: ["BREVO_API_KEY"] }).https.onCall(async (data, context) => {
   const wallet = context.auth?.token?.shopWallet;
   if (!wallet) throw new functions.https.HttpsError("unauthenticated", "Sign in with your wallet first.");
   const { op, ...args } = data || {};

@@ -31,7 +31,8 @@ const rpc = async (method, params) => {
   if (method === "eth_getTransactionReceipt") return p ? { status: "0x1", blockNumber: hex(10) } : null;
   throw new Error(method);
 };
-const as = (wallet, extra = {}) => ({ db, wallet, admin: wallet === STAFF, bucket, rpc, ...extra });
+const sent = []; // emails, instead of Brevo
+const as = (wallet, extra = {}) => ({ db, wallet, admin: wallet === STAFF, bucket, rpc, sendEmail: async (m) => sent.push(m), ...extra });
 const order = async (id) => (await db.doc(`orders/${id}`).get()).data();
 const messages = async (id) => (await db.collection(`orders/${id}/messages`).orderBy("at").get()).docs.map((d) => d.data());
 let txN = 0;
@@ -73,9 +74,19 @@ test("a seller applies, is approved and lists a product and a service", async ()
   assert.equal(listing.files[0].size, 1234, "size comes from storage, not the client");
   assert.deepEqual(listing.formats, ["PDF"]);
   await assert.rejects(OPS.admin(as(STAFF), { action: "reviewListing", id: productId, approve: false }), /should change/);
+  await OPS.admin(as(STAFF), { action: "reviewListing", id: productId, approve: false, note: "Add a preview" });
+  await OPS.saveListing(as(SELLER), { ...(await db.doc(`listings/${productId}`).get()).data(), status: "review" });
   await OPS.admin(as(STAFF), { action: "reviewListing", id: productId, approve: true });
   await OPS.admin(as(STAFF), { action: "reviewListing", id: serviceId, approve: true });
   assert.equal((await db.doc(`listings/${serviceId}`).get()).data().status, "live");
+
+  assert.deepEqual(sent.map((m) => [m.to, m.subject]), [
+    ["ama@example.com", "You're approved to sell on AlkeShop"],
+    ["ama@example.com", "Changes needed: Shop Kit"],
+    ["ama@example.com", "Your listing is live: Shop Kit"],
+    ["ama@example.com", "Your listing is live: I will design a logo"],
+  ]);
+  assert.match(sent[1].html, /Add a preview/);
 });
 
 test("checkout is off until a treasury is set", async () => {

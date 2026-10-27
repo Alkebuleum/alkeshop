@@ -11,6 +11,7 @@ const {
   DOWNLOAD_URL_MS, PRODUCT_CATEGORIES, SERVICE_CATEGORIES, LICENSES,
 } = require("./config");
 const { checkPayment } = require("./payments");
+const { TEMPLATES, sendEmail } = require("./email");
 
 class ShopError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -430,6 +431,20 @@ async function fileUrl(ctx, { path, orderId, listingId }) {
   return { url };
 }
 
+/* ---------------- Email ---------------- */
+
+// Emails a seller at the address from their application. Never fails the
+// caller: the decision is already saved and shows on the site either way.
+async function notifySeller(ctx, { sellerId, template, data }) {
+  try {
+    const to = (await ctx.db.doc(`sellerContacts/${sellerId}`).get()).data()?.email;
+    if (!to) return;
+    await (ctx.sendEmail || sendEmail)({ to, ...TEMPLATES[template](data) });
+  } catch (e) {
+    console.warn(`email ${template} to seller ${sellerId} failed:`, e.message);
+  }
+}
+
 /* ---------------- Administration ---------------- */
 
 async function adminOp(ctx, { action, ...a }) {
@@ -453,6 +468,7 @@ async function adminOp(ctx, { action, ...a }) {
     return { amount: available };
   }
 
+  let email = null; // { sellerId, template, data } to send once the change is saved
   await db.runTransaction(async (tx) => {
     const t = Date.now();
     switch (action) {
@@ -462,6 +478,7 @@ async function adminOp(ctx, { action, ...a }) {
         if (!s.exists) fail("not-found", "No such seller.");
         tx.update(ref, { status: a.approve ? "approved" : "rejected", reviewedAt: t });
         audit(tx, db, ctx, `${a.approve ? "approved" : "rejected"} seller ${s.data().name}`);
+        email = { sellerId: s.data().id, template: a.approve ? "sellerApproved" : "sellerRejected", data: { name: s.data().name } };
         break;
       }
       case "reviewListing": {
@@ -472,6 +489,8 @@ async function adminOp(ctx, { action, ...a }) {
         if (!a.approve && !note) fail("invalid-argument", "Say what the seller should change.");
         tx.update(ref, { status: a.approve ? "live" : "returned", reviewNote: note, reviewedAt: t });
         audit(tx, db, ctx, `${a.approve ? "approved" : "returned"} listing ${l.data().title}${note ? ` · ${note}` : ""}`);
+        const { sellerId, sellerName, title, kind, id } = l.data();
+        email = { sellerId, template: a.approve ? "listingApproved" : "listingReturned", data: { name: sellerName, title, kind, id, note } };
         break;
       }
       case "resolveDispute": {
@@ -499,6 +518,7 @@ async function adminOp(ctx, { action, ...a }) {
         fail("invalid-argument", "Unknown action.");
     }
   });
+  if (email) await notifySeller(ctx, email);
   return { ok: true };
 }
 
