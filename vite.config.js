@@ -12,5 +12,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ["ethers", "qrcode.react", "firebase/app", "firebase/auth", "firebase/firestore"],
   },
+  // Built into docs/ and committed: GitHub Pages serves main /docs.
+  build: { outDir: "docs" },
   test: { environment: "node" },
 });
