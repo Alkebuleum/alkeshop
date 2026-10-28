@@ -8,6 +8,7 @@ import { explorerTx } from "../lib/chain";
 import { MIN_CONFS, SLOW_AFTER_MS } from "../lib/config";
 import { alke, dateTime, fileSize, num, refTail, weekday } from "../lib/format";
 import NotFound from "./NotFound";
+import { appLink } from "../lib/nuruBrowser";
 
 const STEPS = [
   ["sent", "Sent from your wallet"],
@@ -70,7 +71,7 @@ function Pending({ order }) {
         })}
       </ol>
       <Details order={order} />
-      <a href={explorerTx(p.txHash)} target="_blank" rel="noreferrer" className="btn-text justify-center">View on Alkebuleum Explorer<Icon name="external" size={16} /></a>
+      <a href={explorerTx(p.txHash)} {...appLink()} className="btn-text justify-center">View on Alkebuleum Explorer<Icon name="external" size={16} /></a>
       <Link to="/" className="btn-secondary w-full">Keep browsing</Link>
     </Frame>
   );
@@ -119,7 +120,7 @@ function Success({ order }) {
           {order.kind !== "credits" && <div><dt>Seller</dt><dd>{order.sellerName}</dd></div>}
           <div><dt>Amount</dt><dd>{alke(order.amount)}</dd></div>
           <div><dt>Paid</dt><dd>{dateTime(order.paidAt)}</dd></div>
-          <div><dt>Payment reference</dt><dd><a href={explorerTx(p.txHash)} target="_blank" rel="noreferrer" className="font-mono">{refTail(p.txHash)}</a></dd></div>
+          <div><dt>Payment reference</dt><dd><a href={explorerTx(p.txHash)} {...appLink()} className="font-mono">{refTail(p.txHash)}</a></dd></div>
           <div><dt>Status</dt><dd><Pill tone="ok">{order.kind === "product" ? "Delivered" : order.kind === "service" ? "In progress" : "Credits added"}</Pill></dd></div>
         </dl>
       </section>

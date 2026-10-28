@@ -10,7 +10,7 @@ import { toAlke, totalOf } from "../lib/payPlan";
 import { explorerAddress } from "../lib/chain";
 import { GET_ALKE_URL, P2P_URL } from "../lib/config";
 import { time } from "../lib/format";
-import { nuruInjected } from "../lib/nuruBrowser";
+import { appLink } from "../lib/nuruBrowser";
 
 function Balance() {
   const { conn, openConnect, balance, refreshBalance } = useWallet();
@@ -48,16 +48,13 @@ function Balance() {
         <span className={balance?.error ? "text-peach" : "text-mute"}>
           {balance?.error ? (total == null ? "Couldn't reach the Alkebuleum network." : "Couldn't refresh. Showing the last balance.") : balance?.at ? `Updated ${time(balance.at)}` : ""}
         </span>
-        <a href={explorerAddress(conn.address)} target="_blank" rel="noreferrer" className="btn-text">Activity on AlkeScan<Icon name="external" size={14} /></a>
+        <a href={explorerAddress(conn.address)} {...appLink()} className="btn-text">Activity on AlkeScan<Icon name="external" size={14} /></a>
       </div>
     </section>
   );
 }
 
-// Inside Nuru, JollofSwap opens in this same tab: a new window would leave
-// Nuru's dApp browser (and its wallet), so JollofSwap couldn't connect.
 function Way({ icon, title, children, href, cta }) {
-  const tab = nuruInjected() ? {} : { target: "_blank", rel: "noreferrer" };
   return (
     <section className="card flex flex-col gap-2 p-5">
       <div className="flex items-center gap-3">
@@ -65,7 +62,7 @@ function Way({ icon, title, children, href, cta }) {
         <h3 className="font-extrabold">{title}</h3>
       </div>
       <p className="text-[15px] leading-normal text-body">{children}</p>
-      {href && <a href={href} {...tab} className="btn-secondary btn-sm mt-1 self-start">{cta}<Icon name="external" size={16} /></a>}
+      {href && <a href={href} {...appLink()} className="btn-secondary btn-sm mt-1 self-start">{cta}<Icon name="external" size={16} /></a>}
     </section>
   );
 }

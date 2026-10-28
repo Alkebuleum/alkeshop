@@ -12,6 +12,10 @@ export const nuruInjected = () =>
 export const inNuruApp = () =>
   !!nuruInjected() || (typeof navigator !== "undefined" && /NuruWallet\//.test(navigator.userAgent));
 
+// Link props for Alkebuleum apps (JollofSwap, AlkeScan). Inside Nuru they open
+// in this same tab: a new window leaves Nuru's dApp browser and its wallet.
+export const appLink = () => (nuruInjected() ? {} : { target: "_blank", rel: "noreferrer" });
+
 // Makes Nuru forget this site, so it isn't silently reconnected on next load.
 export async function revokeNuruBrowser() {
   const eth = nuruInjected();

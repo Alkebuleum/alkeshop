@@ -11,6 +11,7 @@ import {
 import { rpc, explorerTx } from "../lib/chain";
 import { CREDITS_ENABLED, SHOP_TREASURY, feeOf } from "../lib/config";
 import { alke, date, num, refTail, time } from "../lib/format";
+import { appLink } from "../lib/nuruBrowser";
 
 const WATCHER_BEHIND_S = 5 * 60;
 
@@ -220,7 +221,7 @@ function Admin() {
                     {s.orders.slice(0, 50).map((o) => {
                       const [label, tone] = statusOf(o);
                       return <tr key={o.id}><td>{o.id}</td><td className="max-w-[260px] truncate">{o.title}</td><td>{num(o.amount)}</td><td><Pill tone={tone}>{label}</Pill></td>
-                        <td>{o.payment?.txHash ? <a href={explorerTx(o.payment.txHash)} target="_blank" rel="noreferrer" className="font-mono">{refTail(o.payment.txHash)}</a> : "-"}</td></tr>;
+                        <td>{o.payment?.txHash ? <a href={explorerTx(o.payment.txHash)} {...appLink()} className="font-mono">{refTail(o.payment.txHash)}</a> : "-"}</td></tr>;
                     })}
                   </tbody>
                 </table>
@@ -241,7 +242,7 @@ function Admin() {
                         <td><Pill tone={o.payment.failure ? "bad" : "peach"}>{o.payment.failure ? "Underpaid" : "Amount unverified"}</Pill></td>
                         <td>{num(o.amount)}</td>
                         <td>{o.payment.received != null ? num(o.payment.received) : "?"}</td>
-                        <td><a href={explorerTx(o.payment.txHash)} target="_blank" rel="noreferrer" className="font-mono">{refTail(o.payment.txHash)}</a></td>
+                        <td><a href={explorerTx(o.payment.txHash)} {...appLink()} className="font-mono">{refTail(o.payment.txHash)}</a></td>
                         <td>{o.payment.failure ? <button type="button" onClick={() => refundOrder(o.id, staff, "underpaid")} className="btn-text">Mark refunded</button> : <ReconcileButton o={o} staff={staff} />}</td>
                       </tr>
                     ))}
