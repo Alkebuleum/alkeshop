@@ -1,8 +1,15 @@
 // The catalog as buyers see it: live listings and approved sellers from the
 // store, in the shape the shop pages use.
+import { SHOP_BUCKET } from "./shopBucket";
 
 const COVER_COLORS = ["#2B2D73", "#1E3A5F", "#6B2E1F", "#4A1D4F", "#0F4C5C", "#1F4D3A"];
 export const colorFor = (id = "") => COVER_COLORS[[...id].reduce((t, c) => t + c.charCodeAt(0), 0) % COVER_COLORS.length];
+
+// A listing's cover picture (public in the shop's bucket; storage.rules), or null.
+export const coverImageUrl = (l) => {
+  const path = l?.images?.[0]?.path;
+  return path ? `https://firebasestorage.googleapis.com/v0/b/${SHOP_BUCKET}/o/${encodeURIComponent(path)}?alt=media` : null;
+};
 
 function sellerFromProfile(p) {
   return {

@@ -58,6 +58,7 @@ test("sign in, sell, review, list, buy and fetch files across the real stack", a
   const path = `uploads/${me}/e2ebatch1/guide.pdf`;
   await uploadBytes(ref(seller.storage, path), new TextEncoder().encode("%PDF-1.4 test"));
   await assert.rejects(uploadBytes(ref(buyer.storage, path.replace("guide", "fake")), new Uint8Array([1])), /unauthorized|permission/i, "can't upload into someone else's folder");
+  await assert.rejects(uploadBytes(ref(seller.storage, `listing-images/${me}/e2ebatch1/cover.jpg`), new Uint8Array([1]), { contentType: "image/jpeg" }), /unauthorized|permission/i, "covers are written by Nuru's server only");
 
   const { id } = await seller.api("saveListing", { kind: "product", status: "review", title: "E2E Guide", category: "business", about: "A guide made in the end-to-end test.", files: [{ name: "guide.pdf", size: 1, path }], license: "commercial", price: 12.5 });
   assert.equal((await getDoc(doc(seller.db, `listings/${id}`))).data().files[0].size, 13, "size read from storage");

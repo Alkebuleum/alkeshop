@@ -3,6 +3,7 @@
 // and its files in its own bucket; the default database is only used for the
 // Nuru QR handshake. Each SDK loads on demand.
 import { initializeApp } from "firebase/app";
+import { SHOP_BUCKET } from "./shopBucket";
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FB_API_KEY,
@@ -14,7 +15,7 @@ const app = initializeApp({
 });
 
 export const SHOP_DATABASE = "alkeshop";
-export const SHOP_BUCKET = import.meta.env.VITE_SHOP_BUCKET || "amid-7592b-alkeshop";
+export { SHOP_BUCKET };
 // `VITE_USE_EMULATORS=1 npm run dev` talks to `firebase emulators:start` (ports in firebase.json).
 const EMULATORS = import.meta.env.VITE_USE_EMULATORS === "1";
 

@@ -12,6 +12,7 @@ import { rpc, explorerTx } from "../lib/chain";
 import { CREDITS_ENABLED, SHOP_TREASURY, feeOf } from "../lib/config";
 import { alke, date, num, refTail, time } from "../lib/format";
 import { appLink } from "../lib/nuruBrowser";
+import { coverImageUrl } from "../lib/market";
 
 const WATCHER_BEHIND_S = 5 * 60;
 
@@ -297,8 +298,10 @@ function Admin() {
 
 function ListingReview({ l, seller, staff }) {
   const [note, setNote] = useState("");
+  const image = coverImageUrl(l);
   return (
     <div className="flex flex-col gap-2 border-b border-line pb-4 last:border-b-0">
+      {image && <img src={image} alt={`Cover of ${l.title}`} loading="lazy" className="h-28 w-28 rounded-[14px] object-cover" />}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="font-extrabold">{l.title} <span className="font-medium text-mute">· {l.kind === "product" ? "Digital product" : "Service"} · {seller?.name} · {alke(l.price)}</span></p>
         <Link to={`/${l.kind === "product" ? "products" : "services"}/${l.id}`} className="btn-text">Preview<Icon name="external" size={14} /></Link>

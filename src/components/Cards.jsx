@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Avatar, Icon, Stars } from "./ui";
 import { alke, initials } from "../lib/format";
-import { colorFor } from "../lib/market";
+import { colorFor, coverImageUrl } from "../lib/market";
 
 // The small drawings on product covers, from the canvas catalog screen.
 function Art({ kind }) {
@@ -42,9 +42,19 @@ function Art({ kind }) {
 
 export function Cover({ product, className = "h-[150px] md:h-[200px]", big = false }) {
   const c = product.cover || { bg: colorFor(product.id), label: product.title };
+  const image = coverImageUrl(product);
+  const formats = (product.formats || []).slice(0, 2).join(" · ");
+  if (image) {
+    return (
+      <div className={`relative overflow-hidden rounded-[18px] p-3.5 ${className}`} style={{ background: c.bg }}>
+        <img src={image} alt={product.title} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+        {formats && <span className="relative rounded-full bg-night/70 px-2 py-[3px] text-[11px] font-bold">{formats}</span>}
+      </div>
+    );
+  }
   return (
     <div className={`flex flex-col justify-between rounded-[18px] p-3.5 ${className}`} style={{ background: c.bg }}>
-      <span className="self-start rounded-full bg-white/15 px-2 py-[3px] text-[11px] font-bold">{(product.formats || []).slice(0, 2).join(" · ")}</span>
+      <span className="self-start rounded-full bg-white/15 px-2 py-[3px] text-[11px] font-bold">{formats}</span>
       {c.art && c.art !== "text" ? <Art kind={c.art} /> : (
         <p className={`whitespace-pre-line font-extrabold leading-[1.05] ${big ? "text-[34px] tracking-[-0.03em]" : "text-[17px] md:text-xl"}`}>{c.label}</p>
       )}
@@ -68,10 +78,11 @@ export function ProductCard({ product, seller, showRating = true }) {
 // Product as a row ("New arrivals").
 export function ProductRow({ product, seller }) {
   const c = product.cover || {};
+  const image = coverImageUrl(product);
   return (
     <Link to={`/products/${product.id}`} className="flex items-center gap-3 text-ink no-underline hover:text-ink">
-      <span className="flex h-14 w-14 flex-none items-center justify-center rounded-[14px] text-xs font-extrabold" style={{ background: c.bg || colorFor(product.id) }}>
-        {c.short || initials(product.title)}
+      <span className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-[14px] text-xs font-extrabold" style={{ background: c.bg || colorFor(product.id) }}>
+        {image ? <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" /> : c.short || initials(product.title)}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-bold">{product.title}</span>
@@ -84,6 +95,14 @@ export function ProductRow({ product, seller }) {
 
 export function ServiceThumb({ service, className = "h-[60px] w-[60px] rounded-[14px] text-xl" }) {
   const t = service.thumb || { bg: colorFor(service.id), text: initials(service.title) };
+  const image = coverImageUrl(service);
+  if (image) {
+    return (
+      <span className={`block flex-none overflow-hidden ${className}`} style={{ background: t.bg }} aria-hidden>
+        <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />
+      </span>
+    );
+  }
   return (
     <span className={`flex flex-none items-center justify-center font-extrabold ${className}`} style={{ background: t.bg, color: t.dark ? "#0B0B0F" : "#F5F5F7" }} aria-hidden>
       {t.icon ? <Icon name={t.icon} size={24} stroke={1.8} /> : t.art === "grid" ? (

@@ -62,9 +62,14 @@ test("a seller applies, is approved and lists a product and a service", async ()
   await assert.rejects(OPS.saveListing(as(SELLER), {
     kind: "product", status: "review", title: "Shop Kit", category: "business", about: "Everything a small shop needs.", files: [file(OTHER)], license: "commercial", price: 50,
   }), /wasn't uploaded from this wallet/);
+  await assert.rejects(OPS.saveListing(as(SELLER), {
+    kind: "product", status: "draft", title: "Shop Kit", category: "business", license: "commercial", images: [{ path: `listing-images/${OTHER}/batch123/cover.jpg` }],
+  }), /doesn't belong to this wallet/);
   ({ id: productId } = await OPS.saveListing(as(SELLER), {
     kind: "product", status: "review", title: "Shop Kit", category: "business", about: "Everything a small shop needs.", files: [file(SELLER)], version: "1.0", license: "commercial", price: 50,
+    images: [{ path: `listing-images/${SELLER}/batch123/cover.jpg` }],
   }));
+  assert.deepEqual((await db.doc(`listings/${productId}`).get()).data().images, [{ path: `listing-images/${SELLER}/batch123/cover.jpg` }]);
   ({ id: serviceId } = await OPS.saveListing(as(SELLER), {
     kind: "service", status: "review", title: "I will design a logo", category: "design", scope: "A clean logo for a small business.", price: 200, days: 3, revisions: 1,
     deliverables: ["3 concepts"], needs: [{ q: "Business name", type: "text" }],

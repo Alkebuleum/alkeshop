@@ -99,8 +99,8 @@ function CreateProductForm() {
         </Section>
 
         <Section id="cp-media" n="2" title="COVER">
-          <Cover product={{ id: f.id || f.title, formats: [...new Set(f.files.map((x) => FORMAT_OF(x.name)))], cover: { bg: colorFor(f.id || f.title), label: f.title || "Your title", art: "text" } }} className="h-[180px] w-[180px]" />
-          <p className="hint">The cover is drawn from your title. Previews must not include your full files.</p>
+          <Cover product={{ id: f.id || f.title, title: f.title, images: f.images, formats: [...new Set(f.files.map((x) => FORMAT_OF(x.name)))], cover: { bg: colorFor(f.id || f.title), label: f.title || "Your title", art: "text" } }} className="h-[180px] w-[180px]" />
+          <p className="hint">{f.images?.length ? "This cover was made with Nuru." : "The cover is drawn from your title."} Previews must not include your full files.</p>
         </Section>
 
         <Section id="cp-files" n="3" title="FILES BUYERS RECEIVE">

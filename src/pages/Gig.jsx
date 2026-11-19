@@ -80,8 +80,8 @@ export default function Gig() {
           <div className="md:sticky md:top-[96px] md:self-start">
             <div className="relative">
               <div className="absolute inset-x-4 top-3 z-10 md:static md:mb-4"><DetailActions back="/services" backLabel="Back to services" id={x.id} title={x.title} /></div>
-              <div role="img" aria-label={`Portfolio sample: ${x.sub || x.title}`} className="flex h-[280px] items-center justify-center md:h-[440px] md:rounded-[22px]" style={{ background: x.thumb?.bg }}>
-                <ServiceThumb service={x} className="h-32 w-32 rounded-[28px] bg-white/10 text-5xl" />
+              <div role="img" aria-label={`Cover: ${x.sub || x.title}`} className="flex h-[280px] items-center justify-center overflow-hidden md:h-[440px] md:rounded-[22px]" style={{ background: x.thumb?.bg }}>
+                <ServiceThumb service={x} className={x.images?.length ? "h-full w-full" : "h-32 w-32 rounded-[28px] bg-white/10 text-5xl"} />
               </div>
             </div>
           </div>

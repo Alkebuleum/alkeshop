@@ -3,8 +3,13 @@ rules_version = '2';
 // AlkeShop's own bucket. A signed-in wallet may upload into its own folder;
 // nobody reads directly: downloads go through short-lived links from shopApi
 // (fileUrl), which checks the buyer has paid or is part of the order.
+// Listing cover images are the exception: buyers see them, so anyone can open
+// one by its address (no listing). Only Nuru's server writes them.
 service firebase.storage {
   match /b/{bucket}/o {
+    match /listing-images/{wallet}/{batch}/{name} {
+      allow get: if true;
+    }
     match /uploads/{wallet}/{batch}/{name} {
       allow create: if request.auth != null
         && request.auth.token.get('shopWallet', '') == wallet

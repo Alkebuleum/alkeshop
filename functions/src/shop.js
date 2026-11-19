@@ -55,6 +55,18 @@ function fileList(v, wallet, { maxItems }) {
   });
 }
 
+// Cover images (public, unlike the files buyers pay for): the seller's own.
+const IMAGE_PATH = /^listing-images\/(0x[0-9a-f]{40})\/[A-Za-z0-9_-]{6,40}\/[A-Za-z0-9._-]{1,80}$/;
+function imageList(v, wallet) {
+  if (v == null) return [];
+  if (!Array.isArray(v) || v.length > 4) fail("invalid-argument", "Too many images.");
+  return v.map((f) => {
+    const m = IMAGE_PATH.exec(f?.path || "");
+    if (!m || m[1] !== wallet) fail("invalid-argument", "An image doesn't belong to this wallet.");
+    return { path: f.path };
+  });
+}
+
 /* ---------------- Helpers ---------------- */
 
 const firstName = (name) => String(name || "").split(" ")[0];
@@ -144,6 +156,7 @@ async function saveListing(ctx, l) {
   const strict = status === "review";
   const kind = oneOf(l.kind, ["product", "service"], "listing type");
   const min = (n) => (strict ? n : 0);
+  const images = imageList(l.images, wallet);
 
   let fields;
   if (kind === "product") {
@@ -159,6 +172,7 @@ async function saveListing(ctx, l) {
       version: str(l.version, "Version", { max: 20 }),
       license: oneOf(l.license, LICENSES, "license"),
       price: strict || l.price ? price(l.price) : 0,
+      images,
     };
   } else {
     const needs = Array.isArray(l.needs) ? l.needs : [];
@@ -177,17 +191,23 @@ async function saveListing(ctx, l) {
       available: l.available !== false,
       maxActive: int(l.maxActive ?? 3, "Most active orders", { min: 1, max: 50 }),
       packageName: str(l.packageName || "Standard package", "Package name", { max: 60 }),
+      images,
     };
     if (strict && !fields.deliverables.length) fail("invalid-argument", "Add at least one deliverable.");
   }
 
-  // Product files must really be in storage; their stored size is what counts.
-  if (kind === "product" && strict && bucket) {
-    fields.files = await Promise.all(fields.files.map(async (f) => {
-      const [meta] = await bucket.file(f.path).getMetadata().catch(() => [null]);
-      if (!meta) fail("invalid-argument", `${f.name} didn't finish uploading. Remove it and add it again.`);
-      return { ...f, size: Number(meta.size) };
-    }));
+  // Files must really be in storage; a product file's stored size is what counts.
+  if (strict && bucket) {
+    const stored = async (path, missing) => {
+      const [meta] = await bucket.file(path).getMetadata().catch(() => [null]);
+      if (!meta) fail("invalid-argument", missing);
+      return meta;
+    };
+    const [files] = await Promise.all([
+      Promise.all((fields.files || []).map(async (f) => ({ ...f, size: Number((await stored(f.path, `${f.name} didn't finish uploading. Remove it and add it again.`)).size) }))),
+      Promise.all(images.map((f) => stored(f.path, "A cover image didn't finish uploading. Add it again."))),
+    ]);
+    if (kind === "product") fields.files = files;
   }
 
   return db.runTransaction(async (tx) => {
